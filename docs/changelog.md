@@ -40,8 +40,14 @@ The latest release is
   catches up on completed days missed while offline, including sessions that
   arrive late within the configured backfill window. Digests retain findings,
   usage, and pattern recurrence, and survive full resyncs that retain transcript
-  text. PostgreSQL hubs build their own digests. Read APIs and CLI commands
-  remain planned.
+  text. PostgreSQL hubs build their own digests. CLI commands remain planned.
+
+- Friction Log digests, findings, and recurring patterns can be read over the
+  HTTP API, and `POST /api/v1/friction/run` builds missing days on demand.
+  Digests come back as JSON or Markdown. PostgreSQL hubs serve the same routes;
+  DuckDB and ClickHouse mirrors answer 501 because they do not store friction
+  tables.
+
 - Container deployments can pass the embeddings API key for PostgreSQL recipe
   adoption in `AGENTSVIEW_EMBEDDINGS_API_KEY` instead of mounting a key file.
   Setting it together with `AGENTSVIEW_EMBEDDINGS_API_KEY_FILE` stops startup.

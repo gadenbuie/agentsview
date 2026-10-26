@@ -24,7 +24,7 @@ func TestVersionAdvertisesFriction(t *testing.T) {
 			te := setupWithServerOpts(t, nil)
 			if tt.enable {
 				runner := &review.Runner{Store: te.db, Loc: time.UTC, Now: time.Now, BackfillDays: 7}
-				opts = append(opts, server.WithFriction(runner))
+				opts = append(opts, server.WithFriction(runner, nil))
 				te = setupWithServerOpts(t, opts)
 			}
 			version := decode[map[string]any](t, te.get(t, "/api/v1/version"))

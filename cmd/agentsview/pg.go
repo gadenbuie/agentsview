@@ -51,7 +51,7 @@ func (pgReplica) serveOptions(
 	frictionExcl := serialExclusive()
 	frictionRunner, waitFriction := startFrictionReview(ctx, appCfg, pgStore, frictionExcl)
 	if frictionRunner != nil {
-		opts = append(opts, server.WithFriction(frictionRunner))
+		opts = append(opts, server.WithFriction(frictionRunner, frictionExcl))
 	}
 	closeAll := func() error {
 		waitFriction()

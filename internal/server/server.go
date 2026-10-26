@@ -59,7 +59,10 @@ type VersionInfo struct {
 // Bump it when a client-visible contract cannot be decoded safely by an older
 // CLI or daemon.
 const (
-	APIVersion = 12
+	APIVersion = 13
+	// FrictionAPIVersion is the first daemon API that serves
+	// /api/v1/friction digests, findings, patterns and runs.
+	FrictionAPIVersion = 13
 	// ScopedWatchPushAPIVersion is the first daemon API that accepts bounded
 	// watcher batches and their authoritative recovery scope on push requests.
 	ScopedWatchPushAPIVersion = 7
@@ -214,6 +217,7 @@ type Server struct {
 	artifactExchangeRunner ArtifactExchangeRunner
 	rawSyncTenant          string
 	frictionRunner         *review.Runner
+	frictionExclusive      func(func() error) error
 	rawSyncDeviceAuth      RawSyncDeviceAuth
 	rawSyncCustody         RawSyncCustody
 	rawSyncStatus          RawSyncStatusReader
@@ -561,10 +565,12 @@ func WithGenerateStreamFunc(f insight.GenerateStreamFunc) Option {
 }
 
 // WithFriction attaches the Friction Log review runner. A nil runner leaves
-// the feature unavailable.
-func WithFriction(runner *review.Runner) Option {
+// the feature unavailable. exclusive serializes on-demand runs with the
+// scheduled catch-up job; nil runs them directly.
+func WithFriction(runner *review.Runner, exclusive func(func() error) error) Option {
 	return func(s *Server) {
 		s.frictionRunner = runner
+		s.frictionExclusive = exclusive
 	}
 }
 

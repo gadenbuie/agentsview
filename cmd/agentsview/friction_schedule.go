@@ -122,6 +122,6 @@ func startLocalFrictionReview(
 		return srv.SerializeArchiveWrite(ctx, work)
 	})
 	runner, wait := startFrictionReview(ctx, cfg, store, exclusive)
-	server.WithFriction(runner)(srv)
+	server.WithFriction(runner, exclusive)(srv)
 	return wait
 }
