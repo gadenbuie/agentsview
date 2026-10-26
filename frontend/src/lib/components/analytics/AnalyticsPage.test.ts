@@ -159,6 +159,7 @@ describe("AnalyticsPage outcome window", () => {
             insight_generation_available: false,
             friction_available: false,
             session_stats_available: backendAvailable,
+            kata_available: false,
           };
     router.route = "sessions";
     router.isRootPath = false;
@@ -195,6 +196,7 @@ describe("AnalyticsPage outcome window", () => {
         insight_generation_available: false,
         friction_available: false,
         session_stats_available: true,
+        kata_available: false,
         read_only: true,
       };
       await flushEffects();
@@ -946,6 +948,7 @@ describe("AnalyticsPage refresh behavior", () => {
       insight_generation_available: false,
       friction_available: false,
       session_stats_available: true,
+      kata_available: false,
     };
     router.params = { date_from: "2026-03-01", date_to: "2026-03-31" };
     analytics.from = "2026-03-01";

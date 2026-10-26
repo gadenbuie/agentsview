@@ -11,6 +11,7 @@ export interface VersionInfo {
   friction_available: boolean;
   friction_readable?: boolean;
   insight_generation_available: boolean;
+  kata_available: boolean;
   read_only?: boolean;
   session_stats_available: boolean;
   version: string;
