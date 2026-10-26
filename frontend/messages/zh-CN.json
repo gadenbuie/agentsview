@@ -2885,5 +2885,139 @@
   "appearance_message_colors_swatch_gray": "灰色",
   "appearance_message_colors_preview": "预览",
   "appearance_message_colors_preview_user": "日期测试为什么会失败？",
-  "appearance_message_colors_preview_assistant": "测试夹具要求 UTC，我已更新。"
+  "appearance_message_colors_preview_assistant": "测试夹具要求 UTC，我已更新。",
+  "nav_friction": "摩擦日志",
+  "friction_page_help_intro": "每条发现都是根据已存储会话计算出的确定性启发式结果，并非绝对事实。什么算作摩擦不由任何模型决定。",
+  "friction_page_help_docs": "摩擦日志的工作原理",
+  "friction_page_refresh": "刷新摩擦日志",
+  "friction_date_label": "摘要日期",
+  "friction_date_previous": "上一份摘要",
+  "friction_date_next": "下一份摘要",
+  "friction_date_no_match": "没有匹配的日期",
+  "friction_build_now": "立即生成",
+  "friction_build_title": "为每个尚无摘要的完整日期生成摘要",
+  "friction_build_done": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "已生成 {countNumber} 份摘要" }
+    }
+  ],
+  "friction_build_nothing": "每个完整日期都已有摘要。",
+  "friction_build_failed": "生成失败：{error}",
+  "friction_empty_title": "还没有摩擦摘要",
+  "friction_empty_hint": "每个本地日期结束后会自动生成摘要，每小时运行的任务会补上遗漏的日期。使用“立即生成”可马上生成缺少的日期。",
+  "friction_load_error": "无法加载摩擦日志",
+  "friction_retry": "重试",
+  "friction_digest_heading": "摩擦日志 — {date}",
+  "friction_digest_missing": "{date} 没有摘要。",
+  "friction_digest_meta": "{timezone} · 修订 {revision}",
+  "friction_scanned": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "已扫描 {countNumber} 个会话" }
+    }
+  ],
+  "friction_headline_title": "要点",
+  "friction_p0_title": "P0 警报",
+  "friction_p0_none": "没有 P0 警报。",
+  "friction_p0_item": [
+    {
+      "declarations": [
+        "input count",
+        "input tool",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{tool} 在 {countNumber} 个不同会话中失败" }
+    }
+  ],
+  "friction_patterns_new": "新模式",
+  "friction_patterns_recurring": "反复出现的模式",
+  "friction_patterns_none": "此摘要中没有模式。",
+  "friction_pattern_occurrences": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "出现 {countNumber} 次" }
+    }
+  ],
+  "friction_pattern_sessions": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "{countNumber} 个会话" }
+    }
+  ],
+  "friction_pattern_first_seen": "首次出现于 {date}",
+  "friction_section_corrections": "纠正",
+  "friction_section_errors": "错误",
+  "friction_section_workarounds": "临时方案",
+  "friction_section_deferrals": "推迟事项",
+  "friction_section_patterns": "模式",
+  "friction_none_corrections": "未检测到纠正。",
+  "friction_none_errors": "未检测到错误。",
+  "friction_none_workarounds": "未检测到临时方案。",
+  "friction_none_deferrals": "未检测到推迟事项。",
+  "friction_none_patterns": "未检测到模式。",
+  "friction_section_frustration": "挫败",
+  "friction_section_interruptions": "中断",
+  "friction_none_frustration": "未检测到挫败。",
+  "friction_none_interruptions": "未检测到中断。",
+  "friction_interruption_count": [
+    {
+      "declarations": [
+        "input count",
+        "local countPlural = count: plural",
+        "local countNumber = count: number"
+      ],
+      "selectors": ["countPlural"],
+      "match": { "countPlural=other": "中断 {countNumber} 次" }
+    }
+  ],
+  "friction_kind_correction": "纠正",
+  "friction_kind_error": "错误",
+  "friction_kind_workaround": "临时方案",
+  "friction_kind_deferral": "推迟事项",
+  "friction_kind_pattern": "模式",
+  "friction_kind_frustration": "挫败",
+  "friction_kind_interruption": "中断",
+  "friction_disabled_title": "此服务器已关闭摩擦日志",
+  "friction_disabled_hint": "此服务器不生成摘要。请在 config.toml 中设置 [friction] enabled = true 并重启守护进程。只读归档无法生成摘要。",
+  "friction_markdown_title": "Markdown",
+  "friction_markdown_show": "显示 Markdown",
+  "friction_markdown_copy": "复制 Markdown",
+  "friction_markdown_copied": "已复制 Markdown",
+  "friction_markdown_download": "下载 Markdown",
+  "friction_markdown_loading": "正在加载 Markdown…",
+  "friction_markdown_error": "无法加载 Markdown 摘要。",
+  "friction_open_session": "在第 {ordinal} 条消息处打开 {session}",
+  "friction_open_session_start": "打开 {session}",
+  "friction_quality_card_title": "摩擦日志",
+  "friction_quality_card_body": "在你的会话中发现的纠正、工具错误、临时方案、推迟事项和反复出现模式的每日摘要。",
+  "friction_quality_card_open": "打开摩擦日志",
+  "friction_session_title": "摩擦发现",
+  "friction_session_loading": "正在加载摩擦发现…",
+  "friction_session_error": "摩擦发现不可用。",
+  "friction_session_empty": "此会话中没有摩擦发现。",
+  "friction_session_jump": "消息 {ordinal}",
+  "friction_session_jump_title": "跳转到消息 {ordinal}"
 }

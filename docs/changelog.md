@@ -48,6 +48,11 @@ The latest release is
   DuckDB and ClickHouse mirrors answer 501 because they do not store friction
   tables.
 
+- The **Friction Log page** opens the latest daily digest with P0 alerts and new
+  or recurring patterns first, then each kind of finding with a link to the
+  session message. The session signal panel lists the open session's findings,
+  and Quality links to the page.
+
 - `agentsview friction run`, `digest`, `findings`, and `patterns` build and read
   the Friction Log from the terminal, and MCP clients can read digests and
   recurring patterns with `get_friction_digest` and `list_friction_patterns`.

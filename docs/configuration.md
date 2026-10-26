@@ -2079,8 +2079,8 @@ full resync when the archive retains transcript text. Usage-only SQLite archives
 do not build or update digests. PostgreSQL builds its own digests from pushed
 findings when its serving role can write the review tables.
 
-Read digests, findings, and recurring patterns with
-[`agentsview friction`](/docs/commands/#agentsview-friction), the
+Read digests, findings, and recurring patterns on the **Friction Log** page (`/friction`),
+with [`agentsview friction`](/docs/commands/#agentsview-friction), the
 `/api/v1/friction` routes, or the `get_friction_digest` and
 `list_friction_patterns` [MCP tools](/docs/mcp/). `agentsview friction run`
 builds missing days on demand. Findings are heuristics: check the session
@@ -2411,7 +2411,7 @@ fail. Markdown links count after the link is copied successfully.
 | ------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------- |
 | `search_run`        | `query_type` | `text`, `semantic`, `hybrid`                                                                                          |
 | `session_viewed`    | `agent`      | the session's agent type                                                                                              |
-| `export_run`        | `format`     | `html`, `insight_html`, `csv`, `markdown_link`, `gist`, `insight_gist`                                                |
+| `export_run`        | `format`     | `html`, `insight_html`, `friction_markdown`, `csv`, `markdown_link`, `gist`, `insight_gist`                           |
 | `insight_generated` | `kind`       | `daily_activity`, `agent_analysis`, or a generated-insight template name                                              |
 | `analytics_viewed`  | `page`       | `usage`, `activity`, `trends`, `quality`                                                                              |
 | `screen_viewed`     | `screen`     | `sessions`, `usage`, `activity`, `trends`, `recall`, `quality`, `pinned`, `trash`, `recent-edits`, `data`, `settings` |
