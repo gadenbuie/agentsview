@@ -13,6 +13,7 @@ import (
 
 	"github.com/danielgtaylor/huma/v2"
 	"go.kenn.io/agentsview/internal/archivepush"
+	"go.kenn.io/agentsview/internal/archivesource"
 	"go.kenn.io/agentsview/internal/config"
 	"go.kenn.io/agentsview/internal/db"
 	"go.kenn.io/agentsview/internal/parser"
@@ -576,6 +577,12 @@ func (s *Server) syncThenRunForPush(
 	if rebuilt {
 		onPhase(storage.PushPhaseRebuilt)
 	}
+	// Attachment retries do not prevent copying a current local archive.
+	// Keep local sync and rebuild failures fatal.
+	if _, pending := errors.AsType[archivesource.DrainError](err); pending && ctx.Err() == nil && !local.NeedsResync() {
+		incomplete = errors.Join(incomplete, err)
+		err = nil
+	}
 	if err != nil {
 		return markArchiveRebuilt(ctx, local, startDatabaseID, storage.PushNotStartedError{Err: err})
 	}
@@ -659,7 +666,11 @@ func (s *Server) syncForPush(
 				forceFull = f
 				return nil
 			})
-		if err != nil || stats.ProcessingComplete() {
+		if err != nil {
+			return forceFull, nil, err
+		}
+		if stats.ProcessingComplete() {
+			_, err = s.finishLocalSync(ctx, engine, stats, nil)
 			return forceFull, nil, err
 		}
 		// Local sync owns retries for failed sources. An unscoped push must
@@ -672,7 +683,7 @@ func (s *Server) syncForPush(
 		return false, incomplete, nil
 	}
 	if _, err := s.runResyncWithFallback(ctx, engine, nil); err != nil {
-		return false, nil, err
+		return true, nil, err
 	}
 	return true, nil, ctx.Err()
 }

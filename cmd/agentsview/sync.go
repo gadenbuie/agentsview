@@ -17,6 +17,7 @@ import (
 	"github.com/doordash-oss/oapi-codegen-dd/v3/pkg/runtime"
 
 	"go.kenn.io/agentsview/internal/apiclient"
+	"go.kenn.io/agentsview/internal/archivesource"
 	"go.kenn.io/agentsview/internal/config"
 	"go.kenn.io/agentsview/internal/db"
 	"go.kenn.io/agentsview/internal/parser"
@@ -789,14 +790,18 @@ func runLocalSync(
 	return didResync
 }
 
-// runLocalSyncAuthoritative runs a local sync and returns an error unless its
-// provider discovery completed authoritatively. Push-watch callers use it so
-// a mirror update cannot acknowledge watcher reconciliation that never
-// established a complete view of the local sources.
+// runLocalSyncAuthoritative requires complete local ingestion before a direct
+// push. Pending attachments can retry without blocking a current archive's copy.
 func runLocalSyncAuthoritative(
 	ctx context.Context, appCfg config.Config, database *db.DB, full bool,
 ) (bool, error) {
 	didResync, stats, err := runLocalSyncResult(ctx, appCfg, database, full)
+	if _, pending := errors.AsType[archivesource.DrainError](err); pending && ctx.Err() == nil && !database.NeedsResync() {
+		// The coordinator drains attachments only after local ingestion
+		// completes. Its merged statistics may include attachment failures.
+		log.Printf("attachment ingestion warning: %v", err)
+		return didResync, nil
+	}
 	if err != nil {
 		return didResync, err
 	}
@@ -883,6 +888,11 @@ func coordinateLocalSync(
 
 	engine := sync.NewEngine(ctx, database, localSyncEngineConfig(appCfg))
 	defer engine.Close()
+	attached, err := archivesource.NewManager(ctx, appCfg, database, engine, nil)
+	if err != nil {
+		return didResync, stats, err
+	}
+	defer attached.Close()
 
 	if fallbackOnAbort {
 		stats, err = engine.SyncThenRun(
@@ -907,12 +917,17 @@ func coordinateLocalSync(
 	if !stats.ProcessingComplete() {
 		return didResync, stats, errors.New("local sync processing incomplete")
 	}
-	return didResync, stats, nil
+	archiveStats, err := attached.Drain(ctx, progress)
+	stats.Merge(archiveStats)
+	return didResync, stats, err
 }
 
 func localSyncEngineConfig(appCfg config.Config) sync.EngineConfig {
 	return sync.EngineConfig{
-		AgentDirs:               appCfg.AgentDirs,
+		AgentDirs: appCfg.AgentDirs,
+		RebuildSources: func(ctx context.Context) (sync.RebuildOptions, error) {
+			return archivesource.RebuildContributors(ctx, appCfg)
+		},
 		SourceMachines:          appCfg.SourceMachines,
 		ProviderMetadata:        appCfg.ProviderMetadata,
 		DisabledAgents:          appCfg.DisabledAgents,

@@ -125,12 +125,13 @@ func startArchivePushWatcher(
 	engine *syncpkg.Engine,
 	callback syncpkg.WatchCallback,
 	options syncpkg.WatcherOptions,
-) (func(), func(), []string) {
+) (func(), func(), []string, func(context.Context) error) {
 	if hooks != nil && hooks.startWatcher != nil {
-		return hooks.startWatcher(cfg, engine, callback, options)
+		stop, open, unwatched := hooks.startWatcher(cfg, engine, callback, options)
+		return stop, open, unwatched, nil
 	}
-	stop, open, unwatched, _ := startFileWatcher(cfg, engine, callback, options)
-	return stop, open, unwatched
+	stop, open, unwatched, _, flush := startFileWatcher(cfg, engine, callback, options)
+	return stop, open, unwatched, flush
 }
 
 func newArchivePushLoop(
@@ -1126,19 +1127,9 @@ func (b *localArchiveWriteBackend) startWatchEngine(
 		warnMissingDirs(b.appCfg.ResolveDirs(def.Type), string(def.Type))
 	}
 	cleanResyncTemp(b.appCfg.DBPath)
-	return syncpkg.NewEngine(ctx, b.database, syncpkg.EngineConfig{
-		Emitter:                 emitter,
-		AgentDirs:               b.appCfg.AgentDirs,
-		SourceMachines:          b.appCfg.SourceMachines,
-		ProviderMetadata:        b.appCfg.ProviderMetadata,
-		DisabledAgents:          b.appCfg.DisabledAgents,
-		IncludeCwdPrefixes:      b.appCfg.SyncIncludeCwdPrefixes,
-		ScanProtectedPaths:      b.appCfg.ScanProtectedPaths,
-		Machine:                 b.appCfg.InstallationID,
-		BlockedResultCategories: b.appCfg.ResultContentBlockedCategories,
-		ArchiveContent:          b.appCfg.ArchiveContent,
-		FrictionEnabled:         b.appCfg.Friction.Enabled,
-	}), nil
+	cfg := localSyncEngineConfig(b.appCfg)
+	cfg.Emitter = emitter
+	return syncpkg.NewEngine(ctx, b.database, cfg), nil
 }
 
 // ignoreWatchBatch adapts a local owner's pusher to the watch loop. A local

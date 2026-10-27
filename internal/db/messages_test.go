@@ -646,7 +646,12 @@ func TestWriteSessionBatchReplaceMessagesOnlyBumpsChangedTranscript(t *testing.T
 		}},
 	}
 	insertMessages(t, d, original)
-	_, err := d.getWriter().Exec(t.Context(),
+	before, err := d.GetAllMessages(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Len(t, before, 1)
+	insertSession(t, d, "interleaved-session", "proj")
+	insertMessages(t, d, Message{SessionID: "interleaved-session", Role: "user", Content: "another question"})
+	_, err = d.getWriter().Exec(t.Context(),
 		`UPDATE sessions SET transcript_revision = '7' WHERE id = ?`,
 		sessionID,
 	)
@@ -670,8 +675,13 @@ func TestWriteSessionBatchReplaceMessagesOnlyBumpsChangedTranscript(t *testing.T
 	require.NotNil(t, unchanged)
 	require.NotNil(t, unchanged.TranscriptRevision)
 	assert.Equal(t, "7", *unchanged.TranscriptRevision)
+	unchangedMessages, err := d.GetAllMessages(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Len(t, unchangedMessages, 1)
+	assert.Equal(t, before[0].ID, unchangedMessages[0].ID)
 
 	write.Messages[0].ContentLength = 999
+	write.Messages[0].SourceType = "assistant"
 	write.Messages[0].ToolCalls[0].ResultContentLength = 999
 	write.Messages[0].ToolCalls[0].ResultEvents[0].ContentLength = 999
 	_, err = d.WriteSessionBatch([]SessionBatchWrite{write})
@@ -681,6 +691,12 @@ func TestWriteSessionBatchReplaceMessagesOnlyBumpsChangedTranscript(t *testing.T
 	require.NotNil(t, recalculated)
 	require.NotNil(t, recalculated.TranscriptRevision)
 	assert.Equal(t, "7", *recalculated.TranscriptRevision)
+	updatedMessages, err := d.GetAllMessages(t.Context(), sessionID)
+	require.NoError(t, err)
+	require.Len(t, updatedMessages, 1)
+	assert.Equal(t, before[0].ID, updatedMessages[0].ID)
+	assert.Equal(t, 999, updatedMessages[0].ContentLength)
+	assert.Equal(t, "assistant", updatedMessages[0].SourceType)
 
 	write.Messages[0].ToolCalls[0].ResultContent = "changed result"
 	_, err = d.WriteSessionBatch([]SessionBatchWrite{write})

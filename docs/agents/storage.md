@@ -309,6 +309,35 @@ hash state can contain raw trailing transcript bytes. They retain staged parsing
 but publish projected messages and tool metadata without staged output. Late
 result updates use the same projection as newly inserted messages.
 
+## Attached archive source state
+
+Ordinary installations can read fixed Docbank backup snapshots through
+`internal/archivesource`. See the
+[configuration guide](../configuration.md#history-from-a-saved-archive) for the
+user contract and limits. Archive-only installations cannot attach sources.
+
+The compact index under `archive-sources/` is disposable. It contains accepted
+source metadata, not messages. Rebuild it from the verified saved application
+database. Do not migrate that saved database or adopt its runtime identity.
+
+`archive_attachments` and `archive_attachment_sources` track membership and
+per-source completion targets. `archive_source_bindings` binds original
+archive/device/root/source identity to an immutable manifest.
+`archive_session_provenance` binds each namespaced session to that source.
+Publish provenance and content in the same ordinary or staged write transaction;
+ordinary ingestion must refuse IDs owned by an attached source. Completion
+follows successful parsing and scratch cleanup. Global parser markers do not
+clear unfinished attachment work.
+
+Rebuilds copy registrations and ownership bindings before parsing, and copy
+session provenance with retained rows. Available sources run as contributors
+against the replacement database. Initially offline or detached sources,
+including empty mount directories with no archive layout, retain their previous
+content and completion. Corrupt archives and missing pinned snapshots in
+available repositories fail preparation. After a contributor starts, a failed
+read discards the replacement; only repository-writer contention waits and
+retries. Keep explicit column lists when carrying these tables forward.
+
 ## Archive Content Policy
 
 `archive_content` (`internal/config.ArchiveContent`) narrows what the SQLite
