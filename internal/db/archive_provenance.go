@@ -91,13 +91,14 @@ func recordArchiveSessionProvenanceTx(ctx context.Context, tx *sql.Tx, write Ses
 
 // CheckArchiveSessionProvenance rejects collisions before parser side effects.
 // Publication repeats this check inside its write transaction.
-func (d *DB) CheckArchiveSessionProvenance(ctx context.Context, session Session, provenance ArchiveSessionProvenance) error {
+// A nil provenance denotes ordinary ingestion, which cannot update attached rows.
+func (d *DB) CheckArchiveSessionProvenance(ctx context.Context, session Session, provenance *ArchiveSessionProvenance) error {
 	tx, err := d.getReader().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return d.checkArchiveSessionProvenanceTx(ctx, tx, SessionBatchWrite{Session: session, ArchiveProvenance: &provenance})
+	return d.checkArchiveSessionProvenanceTx(ctx, tx, SessionBatchWrite{Session: session, ArchiveProvenance: provenance})
 }
 
 func (d *DB) ArchiveSourceSessionIDs(ctx context.Context, source ArchiveSourceIdentity) ([]string, error) {

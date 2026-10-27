@@ -268,6 +268,25 @@ func (d *DB) CompleteArchiveSource(ctx context.Context, p ArchiveSourceProvenanc
 	})
 }
 
+// Restoring a member requires another parse even if its source finished while
+// the member was trashed. Several snapshots can share that source. Count only
+// newly pending memberships so restoring another member cannot double-count it.
+func invalidateRestoredArchiveSourceTx(ctx context.Context, tx *sql.Tx, sessionID string) error {
+	if _, err := tx.ExecContext(ctx, `UPDATE archive_attachments SET pending_count=pending_count+1
+		WHERE (repository_id,snapshot_id) IN (
+			SELECT s.repository_id,s.snapshot_id FROM archive_attachment_sources s
+			JOIN archive_session_provenance p USING(archive_id,device_id,root_id,source_key)
+			WHERE p.session_id=? AND s.completed_target=s.target
+		)`, sessionID); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `UPDATE archive_attachment_sources SET completed_target=''
+		WHERE (archive_id,device_id,root_id,source_key) IN (
+			SELECT archive_id,device_id,root_id,source_key FROM archive_session_provenance WHERE session_id=?
+		)`, sessionID)
+	return err
+}
+
 func (d *DB) RecordArchiveSourceError(ctx context.Context, p ArchiveSourceProvenance, message string) error {
 	if strings.TrimSpace(message) == "" || len(message) > 64<<10 {
 		return errors.New("invalid archive source error")

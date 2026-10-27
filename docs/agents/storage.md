@@ -329,9 +329,14 @@ ordinary ingestion must refuse IDs owned by an attached source. Completion
 follows successful parsing and scratch cleanup. Global parser markers do not
 clear unfinished attachment work.
 
-Validate ownership of every parsed result before staging freshness versions or
-changing session metadata. A collision in one DAG branch must leave all existing
-branches unchanged. Repeat ownership checks in the content write transaction.
+Validate ownership of every parsed result, including ordinary remote imports,
+before staging freshness versions or changing session metadata. A collision in
+one DAG branch must leave all existing branches unchanged. Repeat ownership
+checks in the content write transaction.
+
+Restoring an attached session invalidates source completion in every matching
+attachment and updates pending counts in the restore transaction. The next drain
+reparses the restored row even if an upgrade completed while it was trashed.
 
 Rebuilds copy registrations and ownership bindings before parsing, and copy
 session provenance with retained rows. Available sources run as contributors

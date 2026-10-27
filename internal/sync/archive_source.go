@@ -24,9 +24,6 @@ func (e *Engine) sessionArchiveProvenance(session *db.Session, native string) (*
 // Check the whole result set before staging freshness or other session writes:
 // one foreign DAG member must leave every existing member unchanged.
 func (e *Engine) validateArchiveResultOwnership(ctx context.Context, results []parser.ParseResult) error {
-	if e.archiveWriteProvenance == nil {
-		return nil
-	}
 	baseline := e.db
 	if old, ok := e.archiveStore.(*db.DB); ok {
 		baseline = old
@@ -39,12 +36,12 @@ func (e *Engine) validateArchiveResultOwnership(ctx context.Context, results []p
 		if err := e.applyRemoteRewritesContext(ctx, &session, nil); err != nil {
 			return err
 		}
-		provenance, err := e.archiveWriteProvenance(&session, result.Session.ID)
+		provenance, err := e.sessionArchiveProvenance(&session, result.Session.ID)
 		if err != nil {
 			return err
 		}
-		if baseline != e.db {
-			if err := baseline.CheckExistingArchiveProvenance(ctx, session.ID, provenance); err != nil {
+		if baseline != e.db && provenance != nil {
+			if err := baseline.CheckExistingArchiveProvenance(ctx, session.ID, *provenance); err != nil {
 				return err
 			}
 		}

@@ -10999,7 +10999,11 @@ func (e *Engine) collectAndBatchWithOptions(
 			r.releaseAll()
 			continue
 		}
-		if err := e.validateArchiveResultOwnership(ctx, r.results); err != nil {
+		completionCtx := ctx
+		if !e.discardWritesOnCancel {
+			completionCtx = context.WithoutCancel(ctx)
+		}
+		if err := e.validateArchiveResultOwnership(completionCtx, r.results); err != nil {
 			log.Printf("validate archive result ownership: %v", err)
 			stats.RecordFailed()
 			e.noteSQLiteContainerResult(r.containerResultPath(), false)
@@ -11022,10 +11026,6 @@ func (e *Engine) collectAndBatchWithOptions(
 			resultIDs = append(resultIDs, result.Session.ID)
 		}
 		resultIDs = e.applyIDPrefixToSessionIDs(resultIDs)
-		completionCtx := ctx
-		if !e.discardWritesOnCancel {
-			completionCtx = context.WithoutCancel(ctx)
-		}
 		children, err := e.db.SubagentChildSessionIDs(completionCtx, append(
 			append([]string{}, excluded...), resultIDs...,
 		))
@@ -21555,6 +21555,9 @@ func (e *Engine) processAndWriteSessionFile(
 			e.cacheSkip(res.skipCacheKey(path), res.mtime, res.sourceFingerprint)
 		}
 		return false, sessionsChanged, res.err
+	}
+	if err := e.validateArchiveResultOwnership(ctx, res.results); err != nil {
+		return false, sessionsChanged, err
 	}
 	if res.sourceCwdResolution.State != parser.SourceCwdUnspecified {
 		changed, reconcileErr := e.reconcileFilteredSourceCwd(ctx,

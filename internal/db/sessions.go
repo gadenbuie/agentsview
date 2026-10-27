@@ -6365,6 +6365,9 @@ func (db *DB) RestoreSession(ctx context.Context, id string) (int64, error) {
 		return 0, err
 	}
 	if n > 0 {
+		if err := invalidateRestoredArchiveSourceTx(ctx, tx, id); err != nil {
+			return 0, err
+		}
 		// Restoring a selected file ends the earlier whole-thread trash action.
 		// Other materialized pages keep their own deleted_at values.
 		if _, err := tx.ExecContext(ctx, `UPDATE sessions

@@ -88,6 +88,74 @@ func TestArchiveAttachmentOwnershipAndCompletion(t *testing.T) {
 	assert.Equal(t, "manifest-one", pending[0].Provenance.ManifestID)
 }
 
+func TestRestoreAttachedSessionsInvalidatesMatchingAttachments(t *testing.T) {
+	database := testDB(t)
+	ctx := t.Context()
+	owner := ArchiveSourceProvenance{ManifestID: "manifest", Source: ArchiveSourceIdentity{
+		ArchiveID: "archive", DeviceID: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", RootID: "root", SourceKey: "shared",
+	}}
+	attachments := []struct {
+		snapshot        string
+		shared, pending bool
+		want            int64
+	}{
+		{snapshot: "first", shared: true, want: 1},
+		{snapshot: "second", shared: true, want: 1},
+		{snapshot: "already-pending", shared: true, pending: true, want: 1},
+		{snapshot: "unrelated", want: 0},
+	}
+	for _, attachment := range attachments {
+		p := owner
+		p.Attachment = ArchiveAttachmentKey{RepositoryID: "repository", SnapshotID: attachment.snapshot}
+		if !attachment.shared {
+			p.Source.SourceKey, p.ManifestID = "unrelated", "other-manifest"
+		}
+		require.NoError(t, database.RegisterArchiveAttachment(ctx, p.Attachment, "archive"))
+		require.NoError(t, database.SetArchiveAttachmentTargets(ctx, p.Attachment, "target", []ArchiveSourceTarget{{Provenance: p, Target: "target"}}))
+		if !attachment.pending {
+			require.NoError(t, database.CompleteArchiveSource(ctx, p, "target"))
+		}
+	}
+	owner.Attachment = ArchiveAttachmentKey{RepositoryID: "repository", SnapshotID: "first"}
+	for _, native := range []string{"one", "two"} {
+		id := owner.Source.DeviceID + "~" + native
+		_, err := database.WriteSessionBatchAtomic(ctx, []SessionBatchWrite{{
+			Session:           Session{ID: id, Machine: owner.Source.DeviceID, Agent: "claude"},
+			ArchiveProvenance: &ArchiveSessionProvenance{ArchiveSourceProvenance: owner, NativeSessionID: native},
+		}})
+		require.NoError(t, err)
+		require.NoError(t, database.SoftDeleteSession(ctx, id))
+	}
+	for _, native := range []string{"one", "two"} {
+		id := owner.Source.DeviceID + "~" + native
+		restored, err := database.RestoreSession(ctx, id)
+		require.NoError(t, err)
+		require.EqualValues(t, 1, restored)
+		for _, attachment := range attachments {
+			key := ArchiveAttachmentKey{RepositoryID: "repository", SnapshotID: attachment.snapshot}
+			status, err := database.ArchiveAttachmentStatus(ctx, key)
+			require.NoError(t, err)
+			assert.Equal(t, attachment.want, status.Pending, attachment.snapshot)
+			pending, err := database.PendingArchiveSources(ctx, key, ArchiveSourceIdentity{}, 10)
+			require.NoError(t, err)
+			assert.Len(t, pending, int(attachment.want), attachment.snapshot)
+			if attachment.shared {
+				require.Len(t, pending, 1)
+				assert.Equal(t, owner.Source, pending[0].Provenance.Source)
+			}
+		}
+	}
+	// Completing one membership leaves the others pending; a repeated restore
+	// of an already visible session must not invalidate it again.
+	require.NoError(t, database.CompleteArchiveSource(ctx, owner, "target"))
+	restored, err := database.RestoreSession(ctx, owner.Source.DeviceID+"~one")
+	require.NoError(t, err)
+	assert.Zero(t, restored)
+	status, err := database.ArchiveAttachmentStatus(ctx, owner.Attachment)
+	require.NoError(t, err)
+	assert.Zero(t, status.Pending)
+}
+
 func TestArchiveAttachmentRefusesLocalAuthority(t *testing.T) {
 	for _, kind := range []string{"installation", "machine alias", "retained publication authority", "archive-only"} {
 		t.Run(kind, func(t *testing.T) {

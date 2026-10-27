@@ -102,6 +102,55 @@ func TestArchiveDrainSingleFlight(t *testing.T) {
 	require.NotNil(t, session)
 }
 
+func TestArchiveDrainReparsesRestoredSessionAfterPolicyUpgrade(t *testing.T) {
+	for _, prefix := range []string{"", "codex:"} {
+		t.Run(map[string]string{"": "claude", "codex:": "codex"}[prefix], func(t *testing.T) {
+			source, inputs := archiveFixture(t)
+			require.NoError(t, os.RemoveAll(inputs))
+			receiver := dbtest.OpenTestDB(t)
+			cfg := config.Config{DataDir: filepath.Dir(receiver.Path()), ArchiveSources: []config.ArchiveSource{source}, ArchiveContent: config.ArchiveContentFull}
+			engine := syncer.NewEngine(t.Context(), receiver, syncer.EngineConfig{Ephemeral: true})
+			defer engine.Close()
+			manager, err := NewManager(t.Context(), cfg, receiver, engine, nil)
+			require.NoError(t, err)
+			defer manager.Close()
+			require.NoError(t, drainError(manager, t.Context(), nil))
+			id := sourceDevice + "~" + prefix + "019eb791-cf7d-75c1-8439-9ed74c122e02"
+			require.NoError(t, receiver.SoftDeleteSession(t.Context(), id))
+			cfg.ArchiveContent = config.ArchiveContentTranscripts
+			upgraded, err := NewManager(t.Context(), cfg, receiver, engine, nil)
+			require.NoError(t, err)
+			defer upgraded.Close()
+			require.NoError(t, drainError(upgraded, t.Context(), nil))
+			index, err := OpenIndex(t.Context(), source, filepath.Join(cfg.DataDir, "archive-sources"), nil)
+			require.NoError(t, err)
+			key := db.ArchiveAttachmentKey{RepositoryID: index.Info.RepositoryID, SnapshotID: index.Info.SnapshotID}
+			require.NoError(t, index.Close())
+			status, err := receiver.ArchiveAttachmentStatus(t.Context(), key)
+			require.NoError(t, err)
+			require.Zero(t, status.Pending, "trashed rows do not keep an upgrade pending")
+			restored, err := receiver.RestoreSession(t.Context(), id)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, restored)
+			assert.Less(t, receiver.GetSessionDataVersion(t.Context(), id), db.CurrentDataVersion())
+			status, err = receiver.ArchiveAttachmentStatus(t.Context(), key)
+			require.NoError(t, err)
+			assert.EqualValues(t, 1, status.Pending)
+			stats, err := upgraded.Drain(t.Context(), nil)
+			require.NoError(t, err)
+			assert.Positive(t, stats.Synced)
+			assert.Equal(t, db.CurrentDataVersion(), receiver.GetSessionDataVersion(t.Context(), id))
+			session, err := receiver.GetSessionFull(t.Context(), id)
+			require.NoError(t, err)
+			require.NotNil(t, session)
+			assert.Nil(t, session.DeletedAt)
+			status, err = receiver.ArchiveAttachmentStatus(t.Context(), key)
+			require.NoError(t, err)
+			assert.Zero(t, status.Pending)
+		})
+	}
+}
+
 // Done is observed only after Drain has selected an active run to wait for.
 type drainWaitContext struct {
 	context.Context
