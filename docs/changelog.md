@@ -11,6 +11,11 @@ The latest release is
 
 **New features**
 
+- `agentsview agents` lists every supported agent, where AgentsView looks for its
+  sessions, and which session details it reads, such as tool calls, thinking,
+  subagents, and token usage. Add `--json` for scripts. It works without a
+  daemon, configuration, or database.
+
 - Assistants connected through MCP can now explain where one session's cost came
   from. The new `get_session_usage` tool reports the same tokens and cost as
   `agentsview session usage`, split by model and by request, with the most

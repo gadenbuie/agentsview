@@ -1,5 +1,5 @@
 ---
-last_edited: 2026-10-22
+last_edited: 2026-10-27
 title: CLI Reference
 description: All AgentsView commands, flags, and environment variables
 ---
@@ -1001,6 +1001,49 @@ Consumers should require the expected `schema_version` and ignore unknown
 fields. Adding an optional field does not require a schema bump; removing or
 renaming a field, changing a field's type or meaning, or making a previously
 valid response invalid does.
+
+______________________________________________________________________
+
+### `agentsview agents`
+
+List every agent AgentsView can read, where it looks for each agent's
+sessions, and which session details each agent's parser extracts. Pass one or
+more agent types to show only those agents. The command does not need a running
+daemon, configuration, or database.
+
+```bash
+agentsview agents
+agentsview agents codex claude
+agentsview agents --json
+```
+
+```
+codex (Codex)
+  sessions: ~/.codex/sessions, ~/.codex/archived_sessions
+  override: CODEX_SESSIONS_DIR
+  reads: first_message, session_name, cwd, git_branch, relationships, subagents, thinking, tool_calls, tool_results, tool_result_events, per_message_token_usage, termination_status, model
+```
+
+The `sessions` line shows the default locations relative to your home
+directory. The `override` line names the environment variable that replaces
+them. Import-only agents show `imported with agentsview import` instead.
+
+The JSON contract has `schema_version` (currently `1`) and an `agents` array.
+Each agent has these fields:
+
+| Field           | Type    | Meaning                                                                           |
+| --------------- | ------- | --------------------------------------------------------------------------------- |
+| `type`          | string  | Agent type used by `--agent` filters and session IDs                              |
+| `display_name`  | string  | Human-readable agent name                                                         |
+| `import_only`   | boolean | Sessions arrive only through `agentsview import`                                  |
+| `file_based`    | boolean | Sessions are files rather than an application database                            |
+| `default_dirs`  | array   | Default session locations, relative to the home directory                         |
+| `data_dir_root` | string  | Location under the AgentsView data directory, for agents AgentsView stores itself |
+| `env_var`       | string  | Environment variable that overrides `default_dirs`                                |
+| `content`       | object  | Session detail name mapped to `supported`, `unsupported`, or `not_applicable`     |
+
+New content details may appear without a schema bump, so consumers should ignore
+names they do not recognize.
 
 ______________________________________________________________________
 

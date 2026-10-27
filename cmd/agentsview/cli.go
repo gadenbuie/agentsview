@@ -142,6 +142,7 @@ func newRootCommand() *cobra.Command {
 	root.AddCommand(newSigningCommand())
 	root.AddCommand(newDoctorCommand())
 	root.AddCommand(newVersionCommand())
+	root.AddCommand(newAgentsCommand())
 	root.AddCommand(newOpenAPICommand())
 	root.AddCommand(newRemoteSyncCommand())
 
