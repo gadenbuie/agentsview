@@ -195,7 +195,7 @@
         patterns={digest.patterns ?? []}
       />
 
-      <FrictionReviewSummaryPanel date={digest.date} />
+      <FrictionReviewSummaryPanel date={digest.date} revision={digest.revision} />
 
       {#each sections as section (section.kind)}
         <FrictionSignalSection {section} />
