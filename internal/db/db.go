@@ -604,7 +604,12 @@ CREATE INDEX IF NOT EXISTS idx_provider_freshness_updated_at
 // (144: reconcile Hermes and Augure Desktop model usage in place.)
 // (145: restore Claude-format channel messages in place, retaining retry identities.)
 // (146: retain explicit dialogue classification for visible conversation exports.)
-const dataVersion = 146
+// (147: keep one tool call per VS Code toolCallId so transcripts render. Re-parse
+// VS Code-format sources in place; source and session identities are unchanged.)
+// (148: link ordinary Codex forks to the thread named by forked_from_id. Re-parse
+// Codex-format sources in place; source and session identities are unchanged.)
+// (149: reparse Command Code v3 transcripts, token usage, and fork links in place.)
+const dataVersion = 149
 
 const archiveOnlyVersionBase = 1 << 20
 

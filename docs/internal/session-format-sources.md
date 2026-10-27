@@ -1,5 +1,5 @@
 ---
-last_edited: 2026-10-07
+last_edited: 2026-10-26
 ---
 
 # Session Format Source Inventory
@@ -620,6 +620,23 @@ fixtures retain this field; missing identities remain source-local.
   particular file's history remains unverified.
   `TestCodexMisfiledPageUpgradeRetainsTranscriptMetadata` verifies that a
   proven page correction preserves transcript metadata during upgrade.
+
+- **Ordinary fork lineage (checked 2026-10-27 at
+  `6b9826e3aa83b1a5947db50f4332cb9c65f1b340`):** Current Codex
+  [session metadata](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/protocol/src/protocol.rs#L3040-L3051)
+  carries an optional `forked_from_id` beside the subagent
+  `parent_thread_id`. When a thread is forked, the
+  [thread manager](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/core/src/thread_manager.rs#L1413-L1419)
+  takes the source thread from the history being forked, and
+  [thread creation](https://github.com/openai/codex/blob/6b9826e3aa83b1a5947db50f4332cb9c65f1b340/codex-rs/thread-store/src/local/create_thread.rs#L28-L50)
+  records it in the new rollout's metadata. AgentsView links a rollout with
+  `forked_from_id` to `codex:<forked_from_id>` as a `fork`. A subagent parent
+  takes precedence, and revert pages keep their continuation parent. Data
+  version 148 reparses Codex, TraeX, and Augure Code sources in place.
+  `TestParseCodexSessionForkLineage` and
+  `TestCodexOrdinaryForkLinkSurvivesSyncAndUpgrade` cover the link and the
+  upgrade, using the shape reported in
+  [issue #2468](https://github.com/kenn-io/agentsview/issues/2468).
 
 - **Compressed rollouts (checked 2026-10-16, source at commit
   `6b991972c5b539198dcea9bac4fc14e57559c3af`):** A background worker started
@@ -2533,6 +2550,17 @@ schemas keep their existing ordering behavior.
   `result.metadata.toolCallRounds`. Each assistant message records the model
   that served its turn (`result.metadata.resolvedModel`, falling back to the
   request's prefixed `modelId`).
+- **Shared tool call IDs (2026-10-26):** One tool call can persist as two
+  `toolInvocationSerialized` items with the same `toolCallId`. A web fetch
+  stores a `presentation: "hidden"` `copilot_fetchWebPage` placeholder and the
+  `vscode_fetchWebPage_internal` invocation that carries the URL
+  ([#2454](https://github.com/kenn-io/agentsview/issues/2454), GitHub Copilot
+  Chat 0.54.0). `ToolInvocationPresentation.Hidden` in
+  [languageModelToolsService.ts](https://github.com/microsoft/vscode/blob/357b0857281c7c0c8673e8eba78ecc8ed9469e5a/src/vs/workbench/contrib/chat/common/tools/languageModelToolsService.ts)
+  at `357b0857281c7c0c8673e8eba78ecc8ed9469e5a` also marks real calls whose
+  output VS Code renders elsewhere, such as file edits and todo lists, so
+  Agentsview keeps hidden calls and only collapses repeated IDs. It keeps one
+  call per `toolCallId`, preferring a visible invocation over a hidden one.
 - **Session names (2026-09-30):** The session's `customTitle` holds both a name
   set with `/rename` and the title VS Code generates after the first request;
   nothing marks which one it is. See `setSessionTitle` and
@@ -2866,16 +2894,48 @@ schemas keep their existing ordering behavior.
 
 ## Command Code (`commandcode`)
 
-- **Format:** Session JSONL accompanied by a `.meta.json` sidecar.
-- **Evidence:** `no-public-source`.
-- **Upstream:** Command Code's first-party product site, documentation surfaces,
-  and public GitHub repositories were checked 2026-07-19. Clone the official
-  `https://github.com/CommandCodeAI/command-code.git` repository at
-  `a774fe8cbe71697d115d4660de299c9c1b286cea`; it contains product and issue
-  material only, not the CLI implementation. No authoritative persistence
-  source or disk schema was public.
-- **Usage and cost:** The consumed records provide transcript and metadata but
-  no token, cache, reasoning, credit, or USD accounting to Agentsview.
+- **Format:** Session JSONL with an optional `.meta.json` sidecar. v2 stores
+  `role` and `content` at the entry root; v3 nests them under `message`.
+- **Evidence:** `documentation`.
+- **Upstream:**
+  [command-code 1.88.0 npm tarball](https://registry.npmjs.org/command-code/-/command-code-1.88.0.tgz),
+  published 2026-10-23, checked 2026-10-25, SHA1
+  `6b20ae053f19878df6dc15d82b36aa4a4bbecd2a`. In `dist/cli.mjs`,
+  `createSessionStoreV3` writes a `session` header with `version: 3`, `id`,
+  `timestamp`, `cwd`, and optional `parentSession`, then entries with `id`,
+  `parentId`, and `timestamp`. `appendMessage` stores
+  `message: {role, content}`, with optional assistant `usage`, `model`, and
+  `effort` at the entry root. Blocks include `text`, `thinking`, `tool_use`, and
+  `tool_result`. `latestSessionInfoName` takes the last `session_info` name,
+  falling back to the sidecar title when that name is empty. `model_change`
+  applies to later turns; effort comes only from a turn's inline value because
+  `recordEffortChange` stores effort per model. The sidecar model is not
+  consumed; it describes the latest selection, and `migrateToV3` copies it only
+  to the last assistant turn. `migrateToV3` and `migrationWriteBack` rewrite v2
+  in place, merging a tool turn with the following user turn. Agentsview shows
+  abandoned branches of a rewound conversation in file order.
+- **Usage and cost:** `toSessionUsage` writes `inputTokens`, `outputTokens`,
+  `cacheReadTokens`, and `cacheWriteTokens`, with optional `cacheWriteTokens1h`
+  and `costUsd`. Finish handlers take input from `totalUsage.inputTokens` and
+  cache counts from `inputTokenDetails`. In
+  [ai 6.0.116](https://registry.npmjs.org/ai/-/ai-6.0.116.tgz),
+  `src/types/usage.ts` defines input as the total; in
+  [@ai-sdk/anthropic 3.0.77](https://registry.npmjs.org/@ai-sdk/anthropic/-/anthropic-3.0.77.tgz),
+  `src/convert-anthropic-messages-usage.ts` adds uncached, cache-read, and
+  cache-write input. Agentsview uses
+  `max(inputTokens - cacheReadTokens - cacheWriteTokens, 0)` for uncached input.
+  `estimateCatalogCostUsd` treats `cacheWriteTokens` as the total and clamps the
+  one-hour subset to that total; the remaining writes use the five-minute rate.
+  Agentsview preserves the total and one-hour subset for model pricing.
+  `costUsd` is not consumed. All four fork paths write `parentSessionId` and
+  `forkedAt` in the sidecar. `cloneSessionFile`, `createBranchedSession`, and
+  `forkFromV3` copy earlier turns with their original usage and timestamps under
+  a new header timestamped at fork time. The CLI's `forkSession` copies the old
+  header too, adding `sessionId` to each line; it keeps the parent's header
+  timestamp and does not add a header `parentSession`. Agentsview links through
+  the sidecar parent, falling back to the header parent path. For a fork, it
+  omits usage at or before the later of the header timestamp and sidecar
+  `forkedAt`.
 - **Agentsview:** `internal/parser/commandcode.go` and
   `internal/parser/commandcode_provider.go`.
 
@@ -2929,11 +2989,10 @@ schemas keep their existing ordering behavior.
   job control: they carry no transcript content, they are not surface events,
   and the upstream type notes state that collecting model output from them is
   not required. They are in the known-event inventory and are ignored when a
-  session is rebuilt. Session IDs are arbitrary
-  non-empty strings and are injectively encoded before use as a directory
-  name. A sessions root belongs to one physical encoding; the upstream backend
-  rejects an opposite-suffix artifact rather than providing mixed-root
-  fallback or migration.
+  session is rebuilt. Session IDs are arbitrary non-empty strings and are
+  injectively encoded before use as a directory name. A sessions root belongs
+  to one physical encoding; the upstream backend rejects an opposite-suffix
+  artifact rather than providing mixed-root fallback or migration.
 
 - **Evidence:** `source`.
 

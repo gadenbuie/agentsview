@@ -1304,6 +1304,15 @@ schema, the same server also registers the
 agentsview pg serve [flags]
 ```
 
+```bash
+agentsview pg serve --push-watch
+```
+
+Use `--push-watch` to ingest mounted sessions and publish them in the same
+process; see
+[PostgreSQL Sync](https://agentsview.io/docs/pg-sync/#agentsview-pg-serve) for setup
+and shutdown.
+
 Accepts the same serve flags (`--host`, `--port`, `--proxy`, etc.) plus
 PostgreSQL configuration from `config.toml`. When the host's `[vector]` config
 matches a generation pushed to PostgreSQL, semantic and hybrid search are served
@@ -1740,6 +1749,7 @@ agentsview export range
 agentsview export hour 2026-07-28-13
 agentsview export day 2026-07-28
 agentsview export day --schema-version 5 --bucket 1m 2026-07-28
+agentsview export day --schema-version 5 --by-machine 2026-07-28
 agentsview export digest --from 2026-06-28 --to 2026-07-27
 ```
 

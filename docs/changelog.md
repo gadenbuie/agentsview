@@ -1,5 +1,5 @@
 ---
-last_edited: 2026-10-22
+last_edited: 2026-10-27
 title: Changelog
 description: Release history for AgentsView
 ---
@@ -16,6 +16,12 @@ The latest release is
   `--max-pending 15m` from a timer or monitor to alert when a machine's push
   keeps failing, for example after the server loses a permission the push
   needs. Machines with nothing new to push never fail the check.
+- Assistants connected through MCP can now explain where one session's cost came
+  from. The new `get_session_usage` tool reports the same tokens and cost as
+  `agentsview session usage`, split by model and by request, with the most
+  expensive requests first on request. It reads the archive as stored and does
+  not refresh source files first.
+
 - PostgreSQL and ClickHouse push services can use a separately managed
   collector with `service install --no-start-daemon`, avoiding competing daemons
   and archive write locks during restarts. The push service exits if no writable
@@ -59,13 +65,29 @@ The latest release is
   `serve --no-sync` also says at startup when the archive needs a rebuild.
 - Usage notes keep a straight accent on the leading edge of the card. The
   accent no longer bends around the card's rounded corners.
+- Command Code v3 sessions appear with their titles, tool calls, and token
+  costs. Forks count only new usage, and existing sessions are reprocessed
+  on upgrade.
 - Foreground `agentsview serve` now exits with status 1 when a server is already
   running so service managers retry. `serve --background` and `daemon start`
   still exit with status 0.
+- Sync no longer fails every session when AgentsView runs inside a sandbox that
+  hands it an unusable temp directory, which mostly affects Windows. SQLite
+  needs a writable temp directory for every session write. When the inherited
+  one cannot be written, AgentsView now uses `tmp/` inside the data directory
+  and prints a warning that names both directories.
 - Claude Code channel questions appear in transcripts, search, and user-message
   totals. Rewinding after a channel conversation keeps that conversation as a
   separate fork and preserves the retry's session ID and saved items. Existing
   Claude-format sources are reprocessed on upgrade.
+- VS Code Copilot sessions that fetched a web page now show their transcript
+  instead of a blank page. VS Code saves each web fetch as two tool calls with
+  the same ID, and AgentsView now keeps only the visible one. Existing VS Code
+  Copilot, Positron, and Windsurf sessions are reprocessed on upgrade.
+- A forked Codex session now appears as a fork of the session it came from, the
+  way forks from other agents already do. Before, it showed up as an unrelated
+  top-level session. Existing Codex, TraeX, and Augure Code sessions are
+  reprocessed on upgrade.
 
 ## 0.46.1
 
