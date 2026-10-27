@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"go.kenn.io/agentsview/internal/config"
 )
 
 func TestFrictionSessionURL(t *testing.T) {
@@ -22,6 +24,23 @@ func TestFrictionSessionURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.want, frictionSessionURL(tt.base, tt.id, tt.ord))
+		})
+	}
+}
+
+func TestFrictionPublicURLIncludesBasePath(t *testing.T) {
+	tests := []struct {
+		name, publicURL, basePath, want string
+	}{
+		{"no_public_url", "", "/agentsview", ""},
+		{"no_base_path", "https://example.com/", "", "https://example.com"},
+		{"adds_base_path", "https://example.com", "/agentsview", "https://example.com/agentsview"},
+		{"base_path_already_present", "https://example.com/agentsview/", "/agentsview", "https://example.com/agentsview"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &Server{cfg: config.Config{PublicURL: tt.publicURL}, basePath: tt.basePath}
+			assert.Equal(t, tt.want, s.frictionPublicURL())
 		})
 	}
 }

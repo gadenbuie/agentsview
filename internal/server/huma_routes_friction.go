@@ -233,10 +233,16 @@ func (s *Server) frictionReader() (db.FrictionReader, error) {
 	return fr, nil
 }
 
+// frictionPublicURL is the browser address that links are built on. A
+// --base-path prefix is added unless public_url already ends with it.
 func (s *Server) frictionPublicURL() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return strings.TrimRight(strings.TrimSpace(s.cfg.PublicURL), "/")
+	base := strings.TrimRight(strings.TrimSpace(s.cfg.PublicURL), "/")
+	if base != "" && s.basePath != "" && !strings.HasSuffix(base, s.basePath) {
+		base += s.basePath
+	}
+	return base
 }
 
 func (s *Server) frictionRequireAuth() bool {
@@ -525,7 +531,7 @@ func (s *Server) humaRunFrictionReview(
 		}
 		out = append(out, frictionRunReport{Date: rep.Date, Written: rep.Written, Summary: summary})
 	})
-	if errors.Is(err, review.ErrInvalidRunDate) {
+	if err != nil && errors.Is(err, review.ErrInvalidRunDate) {
 		return nil, apiError(http.StatusBadRequest, err.Error())
 	}
 	if handled := handleHumaContextError(err); handled != nil {
