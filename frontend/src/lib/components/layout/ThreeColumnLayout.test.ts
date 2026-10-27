@@ -274,6 +274,7 @@ describe("ThreeColumnLayout", () => {
       data_version: 1,
       insight_generation_available: false,
       friction_available: true,
+      friction_readable: true,
       session_stats_available: false,
       version: "dev",
       commit: "unknown",

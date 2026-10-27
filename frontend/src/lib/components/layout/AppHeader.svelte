@@ -97,7 +97,7 @@
     "data",
   ] as const;
 
-  const frictionNavVisible = $derived(sync.serverVersion?.friction_available === true);
+  const frictionNavVisible = $derived(sync.serverVersion?.friction_readable === true);
 
   const tabs: TopBarTab[] = $derived([
     { id: "sessions", label: m.nav_sessions() },

@@ -112,6 +112,10 @@ class FrictionStore {
     try {
       const digest = await FrictionService.getApiV1FrictionDigestsByDate({ date }, { signal });
       if (!this.#digestRead.isCurrent(signal)) return;
+      // Markdown read for the digest this one replaces must not stay on screen.
+      this.#markdownRead.cancel();
+      this.markdown = null;
+      this.loading.markdown = false;
       this.digest = digest;
       this.lastUpdatedAt = Date.now();
     } catch (e) {

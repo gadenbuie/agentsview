@@ -677,7 +677,7 @@ import type { DbSignalCalibration as SignalCalibration, DbSignalSessionExample a
           {/each}
         </div>
       {/if}
-      {#if sync.serverVersion?.friction_available === true}
+      {#if sync.serverVersion?.friction_readable === true}
         <Card level="default" padding="none" class="friction-link-card">
           <article class="friction-link-content">
             <span class="badge rule">{m.insights_page_rule_based()}</span>

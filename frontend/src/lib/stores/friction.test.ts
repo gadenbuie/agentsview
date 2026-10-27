@@ -203,6 +203,8 @@ describe("FrictionStore.loadMarkdown", () => {
     expect(friction.markdown).toBe("# latest");
     next.resolve(makeDigest(OLDER));
     await selecting;
+    expect(friction.digest?.date).toBe(OLDER);
+    expect(friction.markdown).toBeNull();
   });
 
   it("sets a localized error when the Markdown read fails", async () => {

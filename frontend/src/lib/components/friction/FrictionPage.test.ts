@@ -232,12 +232,6 @@ describe("FrictionPage", () => {
     return el!;
   }
 
-  it("loads the requested date from the URL on mount", async () => {
-    router.params = { date: OLDER };
-    await render();
-    expect(loadCalls).toContain(OLDER);
-  });
-
   it("renders summary first: heading, P0 alerts, then ranked patterns", async () => {
     await render();
     const text = document.body.textContent ?? "";

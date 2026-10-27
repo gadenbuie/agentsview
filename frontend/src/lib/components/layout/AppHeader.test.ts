@@ -289,6 +289,7 @@ describe("AppHeader export actions", () => {
       data_version: 1,
       insight_generation_available: false,
       friction_available: true,
+      friction_readable: true,
       session_stats_available: false,
       version: "dev",
       commit: "unknown",
@@ -323,7 +324,28 @@ describe("AppHeader export actions", () => {
     expect(labels).not.toContain("Token Usage");
   });
 
-  it("hides the Friction Log tab when the server does not build digests", async () => {
+  it("shows the Friction Log tab on a server that reads digests but cannot build them", async () => {
+    sync.serverVersion = {
+      api_version: 1,
+      data_version: 1,
+      insight_generation_available: false,
+      friction_available: false,
+      friction_readable: true,
+      session_stats_available: false,
+      version: "dev",
+      commit: "unknown",
+      build_date: "",
+      read_only: true,
+    } as never;
+    component = mount(AppHeader, { target: document.body });
+    await tick();
+    const labels = Array.from(
+      document.querySelectorAll<HTMLElement>(".kit-top-bar__probe .kit-top-bar__tab"),
+    ).map((b) => b.textContent?.trim());
+    expect(labels).toContain("Friction Log");
+  });
+
+  it("hides the Friction Log tab when the server does not store digests", async () => {
     sync.serverVersion = {
       api_version: 1,
       data_version: 1,

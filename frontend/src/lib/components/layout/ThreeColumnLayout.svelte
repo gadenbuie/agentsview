@@ -281,7 +281,7 @@
         <LogsIcon size="12" strokeWidth="2" aria-hidden="true" />
         {m.nav_quality()}
       </button>
-      {#if sync.serverVersion?.friction_available === true}
+      {#if sync.serverVersion?.friction_readable === true}
         <button
           class="mobile-nav-btn"
           class:active={router.route === "friction"}
