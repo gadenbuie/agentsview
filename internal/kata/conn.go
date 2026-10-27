@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,6 +32,9 @@ type Conn struct {
 	tokenSet            bool
 	located             string
 	versionProbeRunning bool
+	// probes counts stored probe results; a caller that waited compares it
+	// with the count it saw before waiting.
+	probes atomic.Uint64
 }
 
 func NewConn(cfg Config) *Conn {
@@ -40,11 +44,16 @@ func NewConn(cfg Config) *Conn {
 func (c *Conn) Config() Config { return c.cfg }
 
 func (c *Conn) Status(ctx context.Context, fresh bool) Status {
-	asked := c.now()
+	seen := c.probes.Load()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if fresh && !c.checked.IsZero() && !c.checked.Before(asked) {
-		// A probe finished while this caller waited; it is fresh enough.
+	return c.statusAfter(ctx, fresh, seen)
+}
+
+// statusAfter returns a probe that finished after the caller saw seen
+// probes; it is fresh enough for a caller that waited for the lock.
+func (c *Conn) statusAfter(ctx context.Context, fresh bool, seen uint64) Status {
+	if fresh && c.probes.Load() != seen {
 		return c.status
 	}
 	return c.statusLocked(ctx, fresh)
@@ -147,6 +156,7 @@ func (c *Conn) storeStatus(ctx context.Context, st Status, client *Client) Statu
 		}
 	}
 	c.status, c.client, c.checked, c.tokenSet = st, client, c.now(), c.cfg.currentToken() != ""
+	c.probes.Add(1)
 	if st.State == StateUnavailable && ctx.Err() != nil {
 		// A canceled probe cannot establish that Kata is unavailable. Let
 		// the next version request check again instead of caching this state.

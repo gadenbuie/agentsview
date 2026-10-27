@@ -96,7 +96,7 @@ func resolveKataStatus(cmd *cobra.Command) (kata.Status, error) {
 	if err != nil {
 		return kata.Status{}, fmt.Errorf("loading config: %w", err)
 	}
-	tr, err := detectTransportContext(ctx, cfg.DataDir, cfg.AuthToken, 0)
+	tr, err := detectClientTransportContext(ctx, &cfg, 0)
 	if err != nil {
 		return kata.Status{}, fmt.Errorf("kata status request failed: detecting daemon: %w", err)
 	}

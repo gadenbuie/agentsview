@@ -337,6 +337,41 @@ func TestKataStatusCommandDaemonRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestKataStatusCommandUsesDeploymentTokenForTheOwningDaemon(t *testing.T) {
+	dataDir := isolateDeploymentEnv(t)
+	tokenFile := filepath.Join(dataDir, "token")
+	require.NoError(t, os.WriteFile(tokenFile, []byte("file-secret\n"), 0o600))
+	t.Setenv("AGENTSVIEW_MODE", "serve")
+	t.Setenv("AGENTSVIEW_AUTH_TOKEN_FILE", tokenFile)
+	var seenAuth string
+	originalClient := kataDaemonHTTPClient
+	kataDaemonHTTPClient = &http.Client{
+		CheckRedirect: originalClient.CheckRedirect,
+		Transport: kataStatusRoundTripper(func(req *http.Request) (*http.Response, error) {
+			body := `{"state":"ready","project":"agentsview"}`
+			if req.URL.Path == "/api/v1/kata/status" {
+				seenAuth = req.Header.Get("Authorization")
+			} else {
+				body = fmt.Sprintf(`{"api_version":%d,"data_version":1}`, server.KataAPIVersion)
+			}
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     http.Header{"Content-Type": {"application/json"}},
+				Body:       io.NopCloser(strings.NewReader(body)),
+				Request:    req,
+			}, nil
+		}),
+	}
+	t.Cleanup(func() { kataDaemonHTTPClient = originalClient })
+	host, port := testPingServer(t)
+	writeDaemonRuntimeForTest(t, dataDir, host, port, "test", false)
+
+	out, err := runKataCommand(t, "kata", "status")
+	require.NoError(t, err)
+	assert.Contains(t, out, "State:    ready\n")
+	assert.Equal(t, "Bearer file-secret", seenAuth)
+}
+
 func TestKataStatusCommandExplicitServerRespectsCallerCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()

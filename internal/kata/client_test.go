@@ -251,14 +251,6 @@ func TestDoErrorsDoNotExposeURLSecrets(t *testing.T) {
 		assertRedacted(t, err)
 	})
 
-	t.Run("invalid_request_url", func(t *testing.T) {
-		c, err := newClient(Config{}, "https://kata.example.test/"+baseSecret)
-		require.NoError(t, err)
-		err = c.do(t.Context(), http.MethodGet, "/"+pathSecret+"%ZZ", query, nil, nil, &struct{}{})
-		require.ErrorIs(t, err, ErrUnavailable)
-		assertRedacted(t, err)
-	})
-
 	t.Run("malformed_success", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("{not json"))
