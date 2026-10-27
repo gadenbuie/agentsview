@@ -95,6 +95,7 @@ type frictionDigestResponse struct {
 	Revision        int               `json:"revision"`
 	SessionsScanned int               `json:"sessions_scanned"`
 	MarkdownSHA256  string            `json:"markdown_sha256"`
+	WebURL          string            `json:"web_url,omitempty" doc:"Friction Log page for this digest when public_url is set"`
 	Summary         frictionSummary   `json:"summary"`
 	Signals         []frictionSignal  `json:"signals"`
 	P0Alerts        []frictionP0Alert `json:"p0_alerts"`
@@ -430,6 +431,9 @@ func (s *Server) humaGetFrictionDigest(
 		Signals:  frictionSignalItems(snap.Signals, s.frictionPublicURL()),
 		P0Alerts: frictionP0AlertItems(snap.P0Alerts),
 		Patterns: frictionPatternItems(patterns),
+	}
+	if base := s.frictionPublicURL(); base != "" {
+		resp.WebURL = base + "/friction?date=" + url.QueryEscape(d.Date)
 	}
 	return &jsonOutput[frictionDigestResponse]{Body: resp}, nil
 }

@@ -32,6 +32,7 @@
 
   let { sessionId }: Props = $props();
   let findings = $state<FrictionFindingItem[]>([]);
+  let partial = $state(false);
   let loading = $state(true);
   let failed = $state(false);
   const read = new LatestRead();
@@ -47,9 +48,11 @@
       );
       if (!read.isCurrent(signal)) return;
       findings = res.findings ?? [];
+      partial = Boolean(res.next_cursor);
     } catch (error) {
       if (isAbortError(error) || !read.isCurrent(signal)) return;
       findings = [];
+      partial = false;
       failed = true;
     } finally {
       if (read.finish(signal)) loading = false;
@@ -67,7 +70,7 @@
   <header class="findings-header">
     <span id="session-friction-title">{m.friction_session_title()}</span>
     {#if !loading && !failed}
-      <span class="findings-count">{findings.length}</span>
+      <span class="findings-count">{findings.length}{partial ? "+" : ""}</span>
     {/if}
   </header>
 
@@ -127,6 +130,8 @@
     font-style: italic;
   }
   .findings-list {
+    max-height: 240px;
+    overflow-y: auto;
     list-style: none;
     margin: 0;
     padding: 0;

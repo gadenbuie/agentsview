@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { Button, Card, EmptyState, IconButton, Typeahead } from "@kenn-io/kit-ui";
   import { formatDateTime, m } from "../../i18n/index.js";
   import { ChevronLeftIcon, ChevronRightIcon } from "../../icons.js";
@@ -23,18 +23,38 @@
     friction.dates.map((item) => ({ name: item.date, label: item.date })),
   );
 
+  const routeDate = $derived(router.params["date"] ?? null);
+
+  // The URL owns the selected date, so history and shared links work while
+  // the page stays mounted.
   function selectDate(date: string | null) {
     if (!date || date === friction.selectedDate) return;
     router.replaceParams({ date });
-    void friction.selectDate(date);
   }
+
+  $effect(() => {
+    const date = routeDate;
+    untrack(() => {
+      if (date && date !== friction.selectedDate && friction.dates.some((d) => d.date === date)) {
+        void friction.selectDate(date);
+      }
+    });
+  });
+
+  // Keep the URL on the digest the store settled on, such as the latest one.
+  $effect(() => {
+    const selected = friction.selectedDate;
+    untrack(() => {
+      if (selected && router.params["date"] !== selected) router.replaceParams({ date: selected });
+    });
+  });
 
   function refresh() {
     void friction.load(friction.selectedDate);
   }
 
   onMount(() => {
-    void friction.load(router.params["date"] ?? null);
+    void friction.load(routeDate);
   });
 
   onDestroy(() => {
@@ -164,7 +184,7 @@
         date={digest.date}
         p0Alerts={digest.p0_alerts}
         signals={digest.signals ?? []}
-        patterns={friction.patterns}
+        patterns={digest.patterns ?? []}
       />
 
       {#each sections as section (section.kind)}

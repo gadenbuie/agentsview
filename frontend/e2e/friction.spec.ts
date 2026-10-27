@@ -51,7 +51,6 @@ function digest(date: string, signals: Record<string, unknown>[]) {
     revision: 1,
     sessions_scanned: 2,
     markdown_sha256: "0".repeat(64),
-    web_url: "",
     summary: {
       date,
       schema_version: 1,
@@ -67,6 +66,7 @@ function digest(date: string, signals: Record<string, unknown>[]) {
     },
     signals,
     p0_alerts: [{ tool: "bash", subject_ids: ["session-a", "session-b", "session-c"] }],
+    patterns: [],
   };
 }
 
@@ -152,8 +152,6 @@ async function mockFriction(page: Page) {
       await route.fulfill({ json: LATEST_DIGEST });
     } else if (path.endsWith(`/api/v1/friction/digests/${OLDER}`)) {
       await route.fulfill({ json: OLDER_DIGEST });
-    } else if (path.endsWith("/api/v1/friction/patterns")) {
-      await route.fulfill({ json: { patterns: [], next_cursor: "" } });
     } else if (path.endsWith("/api/v1/friction/findings")) {
       await route.fulfill({ json: { findings: [], next_cursor: "" } });
     } else {
@@ -206,7 +204,7 @@ test.describe("Friction Log", () => {
   test("is reachable from the primary navigation", async ({ page }) => {
     await page.goto("/");
     await clickNavTab(page, "Friction Log");
-    await expect(page).toHaveURL(/\/friction$/);
+    await expect(page).toHaveURL(new RegExp(`/friction\\?date=${DATE}$`));
     await expectActiveNavTab(page, "Friction Log");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(`Friction Log — ${DATE}`);
   });

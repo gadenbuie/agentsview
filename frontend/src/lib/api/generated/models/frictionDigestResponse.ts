@@ -18,4 +18,6 @@ export interface FrictionDigestResponse {
   signals: FrictionSignal[];
   summary: FrictionSummary;
   timezone: string;
+  /** Friction Log page for this digest when public_url is set */
+  web_url?: string;
 }

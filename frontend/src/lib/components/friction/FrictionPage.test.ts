@@ -55,7 +55,6 @@ function makeDigest(signals: FrictionSignal[]): FrictionDigestResponse {
     revision: 2,
     sessions_scanned: 3,
     markdown_sha256: "0".repeat(64),
-    web_url: "",
     summary: {
       date: DATE,
       schema_version: 1,
@@ -183,7 +182,7 @@ describe("FrictionPage", () => {
       interruptionA,
       interruptionB,
     ]);
-    friction.patterns = [
+    friction.digest.patterns = [
       {
         fingerprint: patternSignal.fingerprint,
         kind: "pattern",
@@ -237,13 +236,6 @@ describe("FrictionPage", () => {
     router.params = { date: OLDER };
     await render();
     expect(loadCalls).toContain(OLDER);
-  });
-
-  it("links to the published Friction Log guide", async () => {
-    await render();
-    expect(document.querySelector<HTMLAnchorElement>(".friction-help-link")?.href).toBe(
-      "https://agentsview.io/docs/configuration/#friction-log",
-    );
   });
 
   it("renders summary first: heading, P0 alerts, then ranked patterns", async () => {
@@ -392,7 +384,6 @@ describe("FrictionPage", () => {
 
   it("moves to the older digest and records it in the URL", async () => {
     const select = vi.spyOn(friction, "selectDate").mockResolvedValue();
-    const replace = vi.spyOn(router, "replaceParams").mockImplementation(() => {});
     await render();
     const previous = document.querySelector<HTMLButtonElement>(
       'button[aria-label="Previous digest"]',
@@ -400,8 +391,24 @@ describe("FrictionPage", () => {
     const next = document.querySelector<HTMLButtonElement>('button[aria-label="Next digest"]')!;
     expect(next.disabled).toBe(true);
     previous.click();
-    expect(replace).toHaveBeenCalledWith({ date: OLDER });
+    await tick();
+    expect(router.params["date"]).toBe(OLDER);
     expect(select).toHaveBeenCalledWith(OLDER);
+  });
+
+  it("follows a date change in the URL while open", async () => {
+    const select = vi.spyOn(friction, "selectDate").mockResolvedValue();
+    await render();
+    router.params = { date: OLDER };
+    await tick();
+    expect(select).toHaveBeenCalledWith(OLDER);
+  });
+
+  it("records the digest the page settled on in the URL", async () => {
+    router.params = {};
+    await render();
+    await tick();
+    expect(router.params["date"]).toBe(DATE);
   });
 
   it("says digests build automatically when the server builds them but none exist yet", async () => {
@@ -445,10 +452,5 @@ describe("FrictionPage", () => {
     )!;
     retry.click();
     expect(loadCalls.at(-1)).toBe(DATE);
-  });
-
-  it("states that findings are heuristics", async () => {
-    await render();
-    expect(document.body.textContent).toContain("not ground truth");
   });
 });

@@ -1,18 +1,9 @@
 import { m } from "../i18n/index.js";
 import { FrictionService } from "../api/generated/index";
-import type {
-  FrictionDigestItem,
-  FrictionDigestResponse,
-  FrictionPatternItem,
-} from "../api/generated/index.js";
+import type { FrictionDigestItem, FrictionDigestResponse } from "../api/generated/index.js";
 import { isAbortError, isNotFoundError } from "../api/runtime.js";
 import { LatestRead } from "../utils/latest-read.js";
 import { perf } from "./perf.svelte.js";
-
-// Headline ranking needs every pattern seen on or after the digest date.
-// The patterns route has no fingerprint filter, so page it with a cap.
-export const PATTERN_PAGE_LIMIT = 1000;
-export const PATTERN_MAX_PAGES = 5;
 
 type ReadStatus = "ok" | "error" | "aborted";
 
@@ -30,7 +21,6 @@ class FrictionStore {
   dates: FrictionDigestItem[] = $state([]);
   selectedDate: string | null = $state(null);
   digest: FrictionDigestResponse | null = $state(null);
-  patterns: FrictionPatternItem[] = $state([]);
   markdown: string | null = $state(null);
   loading = $state({ dates: false, digest: false, markdown: false });
   errors = $state<{
@@ -67,6 +57,7 @@ class FrictionStore {
 
   async load(requestedDate: string | null = null): Promise<void> {
     const signal = this.#datesRead.begin();
+    const selectedAtStart = this.selectedDate;
     const started = performance.now();
     let status: ReadStatus = "ok";
     this.loading.dates = true;
@@ -78,15 +69,13 @@ class FrictionStore {
         return;
       }
       this.dates = [...(res.digests ?? [])].sort(newestFirst);
-      const target =
-        requestedDate && this.dates.some((d) => d.date === requestedDate)
-          ? requestedDate
-          : this.latestDate;
+      // A date picked while the list was loading wins over the request.
+      const wanted = this.selectedDate !== selectedAtStart ? this.selectedDate : requestedDate;
+      const target = wanted && this.dates.some((d) => d.date === wanted) ? wanted : this.latestDate;
       if (target === null) {
         this.#digestRead.cancel();
         this.selectedDate = null;
         this.digest = null;
-        this.patterns = [];
         this.markdown = null;
         this.lastUpdatedAt = Date.now();
       } else {
@@ -121,39 +110,19 @@ class FrictionStore {
     this.loading.digest = true;
     this.errors.digest = null;
     try {
-      const [digest, patterns] = await Promise.all([
-        FrictionService.getApiV1FrictionDigestsByDate({ date }, { signal }),
-        this.#fetchPatterns(date, signal),
-      ]);
+      const digest = await FrictionService.getApiV1FrictionDigestsByDate({ date }, { signal });
       if (!this.#digestRead.isCurrent(signal)) return;
       this.digest = digest;
-      this.patterns = patterns;
       this.lastUpdatedAt = Date.now();
     } catch (e) {
       if (isAbortError(e) || !this.#digestRead.isCurrent(signal)) return;
       this.digest = null;
-      this.patterns = [];
       this.errors.digest = isNotFoundError(e)
         ? m.friction_digest_missing({ date })
         : errorMessage(e);
     } finally {
       if (this.#digestRead.finish(signal)) this.loading.digest = false;
     }
-  }
-
-  async #fetchPatterns(since: string, signal: AbortSignal): Promise<FrictionPatternItem[]> {
-    const out: FrictionPatternItem[] = [];
-    let cursor = "";
-    for (let page = 0; page < PATTERN_MAX_PAGES; page++) {
-      const params = cursor
-        ? { since, limit: PATTERN_PAGE_LIMIT, cursor }
-        : { since, limit: PATTERN_PAGE_LIMIT };
-      const res = await FrictionService.getApiV1FrictionPatterns(params, { signal });
-      out.push(...(res.patterns ?? []));
-      if (!res.next_cursor) break;
-      cursor = res.next_cursor;
-    }
-    return out;
   }
 
   async loadMarkdown(): Promise<void> {
@@ -206,7 +175,6 @@ class FrictionStore {
     this.dates = [];
     this.selectedDate = null;
     this.digest = null;
-    this.patterns = [];
     this.markdown = null;
     this.errors.dates = null;
     this.errors.digest = null;

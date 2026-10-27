@@ -48,6 +48,7 @@ func TestHTTPFrictionService(t *testing.T) {
 	assert.Equal(t, "2026-09-14", view.Date)
 	assert.Equal(t, string(golden), string(view.Summary), "summary bytes are canonical, not re-encoded")
 	assert.Equal(t, "# Friction Log — 2026-09-14\n", view.Markdown)
+	assert.Equal(t, ts.URL+"/friction?date=2026-09-14", view.WebURL)
 
 	_, err = fs.FrictionDigest(t.Context(), "2026-01-01")
 	require.ErrorIs(t, err, service.ErrFrictionDigestNotFound)

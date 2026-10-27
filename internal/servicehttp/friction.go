@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.kenn.io/agentsview/internal/apiclient"
@@ -17,6 +18,18 @@ import (
 )
 
 func (b *httpBackend) SupportsFriction() bool { return b.friction }
+
+// browserPath returns path on the daemon's browser address, or "" when that
+// address is unusable for links.
+func (b *httpBackend) browserPath(path string) string {
+	base, err := url.Parse(b.browserURL)
+	if err != nil || (base.Scheme != "http" && base.Scheme != "https") || base.Host == "" {
+		return ""
+	}
+	base.User = nil
+	base.RawQuery, base.ForceQuery, base.Fragment, base.RawFragment = "", false, "", ""
+	return strings.TrimRight(base.String(), "/") + path
+}
 
 func (b *httpBackend) FrictionDigest(
 	ctx context.Context, date string,
@@ -81,6 +94,7 @@ func (b *httpBackend) FrictionDigest(
 	return &service.FrictionDigestView{
 		Date: body.Date, Timezone: body.Timezone, BuiltAt: body.BuiltAt,
 		Revision: body.Revision, Markdown: string(md.Body), Summary: summary,
+		WebURL: b.browserPath("/friction?date=" + url.QueryEscape(body.Date)),
 	}, nil
 }
 

@@ -36,6 +36,7 @@ type testFrictionSignal struct {
 type testFrictionDigest struct {
 	Date     string `json:"date"`
 	Revision int    `json:"revision"`
+	WebURL   string `json:"web_url"`
 	Summary  struct {
 		SchemaVersion int                 `json:"schema_version"`
 		Corrections   int                 `json:"corrections"`
@@ -118,6 +119,7 @@ func TestFrictionDigestRoutes(t *testing.T) {
 		w := te.get(t, "/api/v1/friction/digests/2026-09-14")
 		assertStatus(t, w, http.StatusOK)
 		got := decode[testFrictionDigest](t, w)
+		assert.Equal(t, "https://av.example.test/base/friction?date=2026-09-14", got.WebURL)
 		assert.Equal(t, friction.SummarySchemaVersion, got.Summary.SchemaVersion)
 		assert.Equal(t, 1, got.Summary.Corrections)
 		require.Len(t, got.Signals, 2)

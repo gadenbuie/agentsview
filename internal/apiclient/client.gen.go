@@ -26403,6 +26403,9 @@ type FrictionDigestResponse struct {
 	Signals         []FrictionSignal      `json:"signals" validate:"required"`
 	Summary         FrictionSummary       `json:"summary"`
 	Timezone        string                `json:"timezone" validate:"required"`
+
+	// WebURL Friction Log page for this digest when public_url is set
+	WebURL *string `json:"web_url,omitempty"`
 }
 
 func (f FrictionDigestResponse) Validate() error {

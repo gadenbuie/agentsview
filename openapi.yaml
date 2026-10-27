@@ -5030,6 +5030,9 @@ components:
           $ref: "#/components/schemas/FrictionSummary"
         timezone:
           type: string
+        web_url:
+          description: Friction Log page for this digest when public_url is set
+          type: string
       required:
         - date
         - timezone

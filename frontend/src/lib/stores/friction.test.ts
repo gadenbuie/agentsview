@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import type { FrictionDigestResponse, FrictionPatternItem } from "../api/generated/index.js";
+import type { FrictionDigestResponse } from "../api/generated/index.js";
 
 vi.mock("../api/runtime.js", () => ({
   isAbortError: vi.fn(() => false),
@@ -11,19 +11,17 @@ vi.mock("../api/generated/index", () => ({
     getApiV1FrictionDigests: vi.fn(),
     getApiV1FrictionDigestsByDate: vi.fn(),
     getApiV1FrictionDigestsByDateMd: vi.fn(),
-    getApiV1FrictionPatterns: vi.fn(),
     postApiV1FrictionRun: vi.fn(),
   },
 }));
 
 import { FrictionService } from "../api/generated/index";
-import { friction, PATTERN_MAX_PAGES, PATTERN_PAGE_LIMIT } from "./friction.svelte.js";
+import { friction } from "./friction.svelte.js";
 
 const service = FrictionService as unknown as {
   getApiV1FrictionDigests: ReturnType<typeof vi.fn>;
   getApiV1FrictionDigestsByDate: ReturnType<typeof vi.fn>;
   getApiV1FrictionDigestsByDateMd: ReturnType<typeof vi.fn>;
-  getApiV1FrictionPatterns: ReturnType<typeof vi.fn>;
   postApiV1FrictionRun: ReturnType<typeof vi.fn>;
 };
 
@@ -51,7 +49,6 @@ function makeDigest(date: string): FrictionDigestResponse {
     revision: 1,
     sessions_scanned: 2,
     markdown_sha256: "0".repeat(64),
-    web_url: "",
     summary: {
       date,
       schema_version: 1,
@@ -67,21 +64,8 @@ function makeDigest(date: string): FrictionDigestResponse {
     },
     signals: [],
     p0_alerts: [],
+    patterns: [],
   } as unknown as FrictionDigestResponse;
-}
-
-function patternItem(fingerprint: string): FrictionPatternItem {
-  return {
-    fingerprint,
-    kind: "error",
-    title: `[friction/error] bash: ${fingerprint}`,
-    first_seen_date: OLDER,
-    last_seen_date: LATEST,
-    occurrence_count: 2,
-    session_count: 2,
-    last_subject_id: "session-a",
-    last_ordinal: null,
-  } as FrictionPatternItem;
 }
 
 beforeEach(() => {
@@ -94,7 +78,6 @@ beforeEach(() => {
   service.getApiV1FrictionDigestsByDate.mockImplementation(({ date }: { date: string }) =>
     Promise.resolve(makeDigest(date)),
   );
-  service.getApiV1FrictionPatterns.mockResolvedValue({ patterns: [], next_cursor: "" });
 });
 
 describe("FrictionStore.load", () => {
@@ -114,6 +97,18 @@ describe("FrictionStore.load", () => {
     expect(friction.selectedDate).toBe(OLDER);
     expect(friction.olderDate).toBe(OLDEST);
     expect(friction.newerDate).toBe(LATEST);
+  });
+
+  it("keeps a date picked while the date list was loading", async () => {
+    await friction.load(LATEST);
+    const list = Promise.withResolvers<{ digests: ReturnType<typeof item>[] }>();
+    service.getApiV1FrictionDigests.mockReturnValueOnce(list.promise);
+    const refresh = friction.load(LATEST);
+    await friction.selectDate(OLDEST);
+    list.resolve({ digests: [item(OLDER), item(LATEST), item(OLDEST)] });
+    await refresh;
+    expect(friction.selectedDate).toBe(OLDEST);
+    expect(friction.digest?.date).toBe(OLDEST);
   });
 
   it("falls back to the latest digest for a stale date bookmark", async () => {
@@ -174,27 +169,6 @@ describe("FrictionStore.selectDate", () => {
     await friction.selectDate(OLDER);
     expect(friction.digest).toBeNull();
     expect(friction.errors.digest).toBe(`No digest exists for ${OLDER}.`);
-  });
-
-  it("pages patterns from the digest date until the cursor is empty", async () => {
-    service.getApiV1FrictionPatterns
-      .mockResolvedValueOnce({ patterns: [patternItem("fl1:a")], next_cursor: "c1" })
-      .mockResolvedValueOnce({ patterns: [patternItem("fl1:b")], next_cursor: "" });
-    await friction.selectDate(LATEST);
-    expect(friction.patterns.map((p) => p.fingerprint)).toEqual(["fl1:a", "fl1:b"]);
-    expect(service.getApiV1FrictionPatterns.mock.calls.map((c) => c[0])).toEqual([
-      { since: LATEST, limit: PATTERN_PAGE_LIMIT },
-      { since: LATEST, limit: PATTERN_PAGE_LIMIT, cursor: "c1" },
-    ]);
-  });
-
-  it("stops paging patterns at the page cap", async () => {
-    service.getApiV1FrictionPatterns.mockResolvedValue({
-      patterns: [patternItem("fl1:x")],
-      next_cursor: "more",
-    });
-    await friction.selectDate(LATEST);
-    expect(service.getApiV1FrictionPatterns).toHaveBeenCalledTimes(PATTERN_MAX_PAGES);
   });
 
   it("drops Markdown loaded for the previous date", async () => {
