@@ -11,11 +11,11 @@ The latest release is
 
 **New features**
 
-- `pg status` and `clickhouse status` show how many sessions are waiting to
-  push and how long ago the last successful push started. Run them with
-  `--max-pending 15m` from a timer or monitor to alert when a machine's push
-  keeps failing, for example after the server loses a permission the push
-  needs. Machines with nothing new to push never fail the check.
+- `pg status` and `clickhouse status` show when the push watcher last pushed
+  successfully and, while pushes fail, since when and why. Run them with
+  `--max-stale 10m` from a timer or monitor to get an alert when pushes keep
+  failing for any reason, a push hangs, or new sessions go unpushed. Idle
+  machines and laptops that slept do not trigger it.
 - Assistants connected through MCP can now explain where one session's cost came
   from. The new `get_session_usage` tool reports the same tokens and cost as
   `agentsview session usage`, split by model and by request, with the most
