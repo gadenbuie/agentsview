@@ -15,15 +15,18 @@
   const digest = $derived(friction.digest);
   const sections = $derived(groupSignals(digest?.signals ?? []));
   const busy = $derived(friction.loading.dates || friction.loading.digest);
+  // friction_available means the server has a friction runner, which can
+  // build even where the session archive is read-only, as on pg serve.
   const frictionAvailable = $derived(sync.serverVersion?.friction_available === true);
-  const buildAvailable = $derived(
-    frictionAvailable && sync.serverVersion?.read_only !== true,
-  );
   const dateOptions = $derived(
     friction.dates.map((item) => ({ name: item.date, label: item.date })),
   );
 
   const routeDate = $derived(router.params["date"] ?? null);
+  // Read before any effect runs: the store may still hold a date from an
+  // earlier visit, and the URL must win.
+  const initialDate = untrack(() => routeDate);
+  let settled = $state(false);
 
   // The URL owns the selected date, so history and shared links work while
   // the page stays mounted.
@@ -41,9 +44,11 @@
     });
   });
 
-  // Keep the URL on the digest the store settled on, such as the latest one.
+  // Once the first load settles, keep the URL on the digest the store chose,
+  // such as the latest one.
   $effect(() => {
     const selected = friction.selectedDate;
+    if (!settled) return;
     untrack(() => {
       if (selected && router.params["date"] !== selected) router.replaceParams({ date: selected });
     });
@@ -54,7 +59,9 @@
   }
 
   onMount(() => {
-    void friction.load(routeDate);
+    void friction.load(initialDate).finally(() => {
+      settled = true;
+    });
   });
 
   onDestroy(() => {
@@ -94,7 +101,7 @@
       </IconButton>
     </div>
 
-    {#if buildAvailable}
+    {#if frictionAvailable}
       <Button
         size="sm"
         label={m.friction_build_now()}

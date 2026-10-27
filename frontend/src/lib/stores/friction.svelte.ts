@@ -125,16 +125,16 @@ class FrictionStore {
     }
   }
 
-  async loadMarkdown(): Promise<void> {
-    const date = this.selectedDate;
-    if (!date) return;
+  // loadMarkdown reads the Markdown of the digest on screen, which can lag
+  // selectedDate while a newly selected digest loads.
+  async loadMarkdown(date: string): Promise<void> {
     const signal = this.#markdownRead.begin();
     this.loading.markdown = true;
     this.errors.markdown = null;
     try {
       const res = await FrictionService.getApiV1FrictionDigestsByDateMd({ date }, { signal });
       const text = await res.text();
-      if (!this.#markdownRead.isCurrent(signal) || this.selectedDate !== date) return;
+      if (!this.#markdownRead.isCurrent(signal) || this.digest?.date !== date) return;
       this.markdown = text;
     } catch (e) {
       if (isAbortError(e) || !this.#markdownRead.isCurrent(signal)) return;

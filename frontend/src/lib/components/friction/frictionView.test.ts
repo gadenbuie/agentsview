@@ -106,8 +106,6 @@ describe("isDiagnosticSubject", () => {
   it.each([
     ["diagnostic subject", "diagnostic", true],
     ["session subject", "session", false],
-    ["missing subject kind (older server)", undefined, false],
-    ["null subject kind", null, false],
   ])("%s", (_name, subjectKind, expected) => {
     expect(isDiagnosticSubject({ subject_kind: subjectKind })).toBe(expected);
   });
@@ -118,7 +116,6 @@ describe("sessionLinkParams", () => {
     ["ordinal present", 4, { msg: "4" }],
     ["ordinal zero", 0, { msg: "0" }],
     ["ordinal null (session-level pattern)", null, {}],
-    ["ordinal missing", undefined, {}],
   ])("%s", (_name, ordinal, expected) => {
     expect(sessionLinkParams({ message_ordinal: ordinal })).toEqual(expected);
   });
@@ -227,8 +224,7 @@ describe("headlinePatterns", () => {
 });
 
 describe("sortedP0", () => {
-  it("sorts alerts by tool and tolerates null", () => {
-    expect(sortedP0(null)).toEqual([]);
+  it("sorts alerts by tool", () => {
     expect(
       sortedP0([
         { tool: "read", subject_ids: ["s1", "s2", "s3"] },

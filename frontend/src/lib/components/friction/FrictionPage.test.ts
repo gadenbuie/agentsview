@@ -376,10 +376,11 @@ describe("FrictionPage", () => {
     expect(build).toHaveBeenCalledTimes(1);
   });
 
-  it("hides Build now on a read-only server", async () => {
+  it("offers Build now on a read-only server that has a friction runner", async () => {
+    // pg serve reports read_only for sessions but still builds digests.
     sync.serverVersion = version({ friction_available: true, read_only: true });
     await render();
-    expect(document.body.textContent).not.toContain("Build now");
+    expect(document.body.textContent).toContain("Build now");
   });
 
   it("moves to the older digest and records it in the URL", async () => {
@@ -402,6 +403,15 @@ describe("FrictionPage", () => {
     router.params = { date: OLDER };
     await tick();
     expect(select).toHaveBeenCalledWith(OLDER);
+  });
+
+  it("opens the URL date over a date kept from an earlier visit", async () => {
+    friction.selectedDate = DATE;
+    router.params = { date: OLDER };
+    await render();
+    await tick();
+    expect(loadCalls).toEqual([OLDER]);
+    expect(router.params["date"]).toBe(OLDER);
   });
 
   it("records the digest the page settled on in the URL", async () => {

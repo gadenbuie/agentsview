@@ -184,15 +184,31 @@ describe("FrictionStore.loadMarkdown", () => {
     service.getApiV1FrictionDigestsByDateMd.mockResolvedValueOnce(
       new Response("---\ndate: 2026-09-21\n---\n\n# Friction Log — 2026-09-21\n"),
     );
-    await friction.loadMarkdown();
+    await friction.loadMarkdown(LATEST);
     expect(friction.markdown).toBe("---\ndate: 2026-09-21\n---\n\n# Friction Log — 2026-09-21\n");
     expect(friction.errors.markdown).toBeNull();
+  });
+
+  it("reads the Markdown of the digest on screen while another date loads", async () => {
+    await friction.load();
+    const next = Promise.withResolvers<FrictionDigestResponse>();
+    service.getApiV1FrictionDigestsByDate.mockReturnValueOnce(next.promise);
+    const selecting = friction.selectDate(OLDER);
+    service.getApiV1FrictionDigestsByDateMd.mockResolvedValueOnce(new Response("# latest"));
+    await friction.loadMarkdown(LATEST);
+    expect(service.getApiV1FrictionDigestsByDateMd).toHaveBeenLastCalledWith(
+      { date: LATEST },
+      expect.anything(),
+    );
+    expect(friction.markdown).toBe("# latest");
+    next.resolve(makeDigest(OLDER));
+    await selecting;
   });
 
   it("sets a localized error when the Markdown read fails", async () => {
     await friction.load();
     service.getApiV1FrictionDigestsByDateMd.mockRejectedValueOnce(new Error("boom"));
-    await friction.loadMarkdown();
+    await friction.loadMarkdown(LATEST);
     expect(friction.markdown).toBeNull();
     expect(friction.errors.markdown).toBe("Could not load the Markdown digest.");
   });

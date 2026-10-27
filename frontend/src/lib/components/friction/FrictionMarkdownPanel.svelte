@@ -47,7 +47,7 @@
           size="sm"
           label={m.friction_markdown_show()}
           disabled={friction.loading.markdown}
-          onclick={() => void friction.loadMarkdown()}
+          onclick={() => void friction.loadMarkdown(date)}
         />
       {:else}
         <CopyButton
