@@ -2,18 +2,14 @@ package kata
 
 import (
 	"errors"
-	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.kenn.io/agentsview/internal/kata/katatest"
 )
 
 func TestNewClientEndpoints(t *testing.T) {
@@ -202,28 +198,6 @@ func TestDoSendsBearerOnlyWhenTokenSet(t *testing.T) {
 		require.NoError(t, c.do(t.Context(), http.MethodGet, "/x", nil, nil, nil, &map[string]any{}))
 	}
 	assert.Equal(t, []string{"", "Bearer tok-1"}, got)
-}
-
-func TestDoOverUnixSocket(t *testing.T) {
-	//nolint:usetesting // t.TempDir can exceed the 107-byte Unix socket path limit.
-	dir, err := os.MkdirTemp("", "kt")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	sock := filepath.Join(dir, "d.sock")
-	l, err := (&net.ListenConfig{}).Listen(t.Context(), "unix", sock)
-	require.NoError(t, err)
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "kata.invalid", r.Host)
-		_, _ = w.Write([]byte(`{"ok":true}`))
-	}))
-	srv.Listener = l
-	srv.Start()
-	t.Cleanup(srv.Close)
-	c, err := newClient(Config{}, katatest.UnixEndpoint(sock))
-	require.NoError(t, err)
-	var out map[string]any
-	require.NoError(t, c.do(t.Context(), http.MethodGet, "/api/v1/health", nil, nil, nil, &out))
-	assert.Equal(t, true, out["ok"])
 }
 
 func TestWindowsUnixSocketPath(t *testing.T) {

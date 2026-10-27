@@ -94,6 +94,18 @@ func TestKataStatusCommandDisabledByDefault(t *testing.T) {
 	assert.Contains(t, out, "State:    disabled\n")
 }
 
+func TestKataStatusCommandIgnoresUnrelatedInvalidSettings(t *testing.T) {
+	dataDir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dataDir, "config.toml"),
+		[]byte("public_url = \"ftp://example.test\"\n"), 0o600))
+	t.Setenv("AGENTSVIEW_DATA_DIR", dataDir)
+	t.Setenv("AGENTSVIEW_NO_DAEMON", "1")
+	t.Setenv("AGENTSVIEW_PG_URL", "")
+	out, err := runKataCommand(t, "kata", "status")
+	require.NoError(t, err, "an invalid public_url is not this command's concern")
+	assert.Contains(t, out, "State:    disabled\n")
+}
+
 func TestKataStatusCommandLocalProbeDoesNotStartDaemon(t *testing.T) {
 	fake := katatest.New(t)
 	dataDir := t.TempDir()

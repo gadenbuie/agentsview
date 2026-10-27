@@ -90,7 +90,9 @@ func resolveKataStatus(cmd *cobra.Command) (kata.Status, error) {
 		}
 		return fetchKataStatus(ctx, remote, token, kataStatusRequestBudget(kata.DefaultTimeout))
 	}
-	cfg, err := config.LoadPFlags(cmd.Flags())
+	// Unrelated invalid sections must not hide a running daemon's answer;
+	// [kata] is checked only before probing Kata from here.
+	cfg, err := config.LoadPFlagsFor(cmd.Flags(), config.ScopeLocal)
 	if err != nil {
 		return kata.Status{}, fmt.Errorf("loading config: %w", err)
 	}
@@ -106,6 +108,9 @@ func resolveKataStatus(cmd *cobra.Command) (kata.Status, error) {
 			return kata.Status{}, fmt.Errorf("kata status request failed: %w", directIncompatibleDaemonError(tr))
 		}
 		return kata.Status{}, fmt.Errorf("kata status request failed: %w", errLocalDaemonUnreachable)
+	}
+	if err := cfg.Kata.Validate(); err != nil {
+		return kata.Status{}, err
 	}
 	hub := filing.EligibleHost(false, cfg.HasPGPushTarget())
 	st, _ := kata.Probe(ctx, kata.ConfigFrom(cfg.Kata, hub))

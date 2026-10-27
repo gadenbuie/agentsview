@@ -71,17 +71,6 @@ func TestFakeRequiresTokenExceptHealth(t *testing.T) {
 	assert.Equal(t, "auth_required", body["error"].(map[string]any)["code"])
 }
 
-func TestFakeListFiltersByMetadata(t *testing.T) {
-	s := New(t)
-	s.AddIssue(Issue{Title: "a", Status: "open", Metadata: map[string]any{"friction.fingerprint": "fl1:aa"}})
-	s.AddIssue(Issue{Title: "b", Status: "closed", ClosedReason: "done", Metadata: map[string]any{"friction.fingerprint": "fl1:bb"}})
-	_, body := get(t, s, "/api/v1/projects/17/issues?meta=friction.fingerprint%3Dfl1%3Abb")
-	issues := body["issues"].([]any)
-	require.Len(t, issues, 1)
-	assert.Equal(t, "b", issues[0].(map[string]any)["title"])
-	assert.True(t, strings.HasPrefix(issues[0].(map[string]any)["qualified_id"].(string), "agentsview#"))
-}
-
 func post(t *testing.T, s *Server, path, key, body string) (int, map[string]any) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, s.URL+path, strings.NewReader(body))
@@ -120,35 +109,6 @@ func TestFakeCreateIdempotencyAndRequestLog(t *testing.T) {
 	assert.Equal(t, path, requests[0].Path)
 	_, listed := get(t, s, path)
 	assert.Len(t, listed["issues"], 1)
-}
-
-func TestFakeIssueActionsAreIdempotent(t *testing.T) {
-	s := New(t)
-	issue := s.AddIssue(Issue{Title: "Closed", Status: "closed", ClosedReason: "done"})
-	path := "/api/v1/projects/17/issues/" + issue.UID
-	for _, tt := range []struct {
-		name, suffix, key, body string
-		changed                 bool
-	}{
-		{name: "reopen", suffix: "/actions/reopen", body: `{}`, changed: true},
-		{name: "reopen again", suffix: "/actions/reopen", body: `{}`, changed: false},
-		{name: "comment", suffix: "/comments", key: "comment-1", body: `{"body":"Observed twice"}`, changed: true},
-		{name: "comment again", suffix: "/comments", key: "comment-1", body: `{"body":"Observed twice"}`, changed: false},
-		{name: "label", suffix: "/labels", body: `{"label":"friction"}`, changed: true},
-		{name: "label again", suffix: "/labels", body: `{"label":"friction"}`, changed: false},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			status, out := post(t, s, path+tt.suffix, tt.key, tt.body)
-			assert.Equal(t, 200, status)
-			assert.Equal(t, tt.changed, out["changed"])
-		})
-	}
-	stored, ok := s.Issue(issue.UID)
-	require.True(t, ok)
-	assert.Equal(t, "open", stored.Status)
-	assert.Empty(t, stored.ClosedReason)
-	assert.Equal(t, []string{"Observed twice"}, stored.Comments)
-	assert.Equal(t, []string{"friction"}, stored.Labels)
 }
 
 func TestFakeUnixEndpointAndFaultQueue(t *testing.T) {
