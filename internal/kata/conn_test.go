@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -311,4 +313,58 @@ func TestConnNeverLogsToken(t *testing.T) {
 	assert.NotContains(t, buf.String(), secret)
 	assert.NotContains(t, st.Message, secret)
 	assert.NotContains(t, err.Error(), secret)
+}
+
+func TestConnFreshStatusSharesProbeFinishedWhileWaiting(t *testing.T) {
+	c := NewConn(readyConfig("http://127.0.0.1:1"))
+	// Each clock read is one tick later. The third read happens only after
+	// both callers have asked, so the first probe stores a later time.
+	var mu sync.Mutex
+	ticks := 0
+	bothAsked := make(chan struct{})
+	base := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
+	c.now = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		ticks++
+		if ticks == 2 {
+			close(bothAsked)
+		}
+		return base.Add(time.Duration(ticks) * time.Millisecond)
+	}
+	probes := 0
+	c.probe = func(context.Context, Config) (Status, *Client) {
+		probes++
+		<-bothAsked
+		return Status{State: StateReady}, nil
+	}
+	first := make(chan Status, 1)
+	go func() { first <- c.Status(t.Context(), true) }()
+	second := make(chan Status, 1)
+	go func() { second <- c.Status(t.Context(), true) }()
+	assert.Equal(t, StateReady, (<-first).State)
+	assert.Equal(t, StateReady, (<-second).State)
+	assert.Equal(t, 1, probes, "the waiting caller reuses the probe that finished after it asked")
+}
+
+func TestConnVersionReadyLeavesTimeForTheResponse(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		c := NewConn(readyConfig("http://127.0.0.1:1"))
+		probes := 0
+		c.probe = func(ctx context.Context, _ Config) (Status, *Client) {
+			probes++
+			if probes == 1 {
+				<-ctx.Done()
+			}
+			return Status{State: StateUnavailable}, nil
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), 400*time.Millisecond)
+		defer cancel()
+		start := time.Now()
+		assert.False(t, c.VersionReady(ctx))
+		assert.Equal(t, 200*time.Millisecond, time.Since(start), "the probe takes half the remaining deadline")
+		require.NoError(t, ctx.Err(), "the version response still has time to finish")
+		synctest.Wait()
+		assert.Equal(t, 2, probes, "a detached follow-up probe still runs")
+	})
 }

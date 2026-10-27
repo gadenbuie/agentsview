@@ -23,6 +23,7 @@ import (
 	"go.kenn.io/agentsview/internal/db"
 	"go.kenn.io/agentsview/internal/kata"
 	"go.kenn.io/agentsview/internal/kata/katatest"
+	"go.kenn.io/agentsview/internal/server"
 )
 
 func runKataCommand(t *testing.T, args ...string) (string, error) {
@@ -217,9 +218,13 @@ func TestKataStatusCommandPusherIsNotHub(t *testing.T) {
 
 func TestKataStatusCommandUsesServer(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/api/v1/kata/status", r.URL.Path)
 		assert.Equal(t, "Bearer srv-token", r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/api/v1/version" {
+			_, _ = fmt.Fprintf(w, `{"api_version":%d,"data_version":1}`, server.KataAPIVersion)
+			return
+		}
+		assert.Equal(t, "/api/v1/kata/status", r.URL.Path)
 		_, _ = w.Write([]byte(`{"state":"wrong_project","project":"agentsview","message":"no active project"}`))
 	}))
 	t.Cleanup(ts.Close)
@@ -227,6 +232,23 @@ func TestKataStatusCommandUsesServer(t *testing.T) {
 	out, err := runKataCommand(t, "kata", "status", "--server", ts.URL, "--json")
 	require.NoError(t, err)
 	assert.Contains(t, out, `"state":"wrong_project"`)
+}
+
+func TestKataStatusCommandNamesAnOlderServer(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/v1/version" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"api_version":13,"data_version":1}`))
+			return
+		}
+		// An older daemon serves the web app for routes it does not know.
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<!doctype html>"))
+	}))
+	t.Cleanup(ts.Close)
+	_, err := runKataCommand(t, "kata", "status", "--server", ts.URL)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "restart or upgrade the server")
 }
 
 type kataStatusRoundTripper func(*http.Request) (*http.Response, error)
@@ -327,7 +349,9 @@ func TestKataStatusCommandDoesNotFollowServerRedirect(t *testing.T) {
 	t.Cleanup(target.Close)
 	var sourceRequests atomic.Int32
 	source := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		sourceRequests.Add(1)
+		if r.URL.Path == "/api/v1/kata/status" {
+			sourceRequests.Add(1)
+		}
 		assert.Equal(t, "Bearer srv-token", r.Header.Get("Authorization"))
 		http.Redirect(w, r, target.URL, http.StatusFound)
 	}))

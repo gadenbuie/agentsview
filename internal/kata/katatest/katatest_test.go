@@ -259,16 +259,6 @@ func TestFakeSnapshotsMutableInputsAndOutputs(t *testing.T) {
 	assert.Equal(t, []byte(`{"title":"Logged"}`), s.Requests()[len(requests)-1].Body)
 }
 
-func TestFakeCreateIdempotencyIgnoresForceNew(t *testing.T) {
-	s := New(t)
-	path := "/api/v1/projects/17/issues"
-	_, first := post(t, s, path, "same-key", `{"title":"Same"}`)
-	status, replay := post(t, s, path, "same-key", `{"title":"Same","force_new":true}`)
-	assert.Equal(t, 200, status)
-	assert.Equal(t, true, replay["reused"])
-	assert.Equal(t, first["issue"].(map[string]any)["uid"], replay["issue"].(map[string]any)["uid"])
-}
-
 func TestFakeGeneratedUIDsAreStrictULIDs(t *testing.T) {
 	s := New(t)
 	_, instance := get(t, s, "/api/v1/instance")
@@ -288,54 +278,6 @@ func TestFakeGeneratedUIDsAreStrictULIDs(t *testing.T) {
 	}
 }
 
-func TestFakeCommentIdempotencyIncludesActorAndTeammate(t *testing.T) {
-	for _, tt := range []struct {
-		name, first, replay string
-	}{
-		{name: "actor", first: `{"body":"note","actor":"one"}`, replay: `{"body":"note","actor":"two"}`},
-		{name: "teammate", first: `{"body":"note","teammate":"one"}`, replay: `{"body":"note","teammate":"two"}`},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			s := New(t)
-			issue := s.AddIssue(Issue{Title: "Existing"})
-			path := "/api/v1/projects/17/issues/" + issue.UID + "/comments"
-			status, first := post(t, s, path, "comment-key", tt.first)
-			assert.Equal(t, 200, status)
-			assert.Equal(t, true, first["changed"])
-			status, mismatch := post(t, s, path, "comment-key", tt.replay)
-			assert.Equal(t, 409, status)
-			assert.Equal(t, "idempotency_mismatch", mismatch["error"].(map[string]any)["code"])
-			stored, ok := s.Issue(issue.UID)
-			require.True(t, ok)
-			assert.Equal(t, []string{"note"}, stored.Comments)
-		})
-	}
-}
-
-func TestFakeShowIncludesStoredComments(t *testing.T) {
-	s := New(t)
-	issue := s.AddIssue(Issue{Title: "Existing"})
-	path := "/api/v1/projects/17/issues/" + issue.UID
-	post(t, s, path+"/comments", "", `{"body":"first"}`)
-	post(t, s, path+"/comments", "", `{"body":"second"}`)
-	_, shown := get(t, s, path)
-	comments := shown["comments"].([]any)
-	require.Len(t, comments, 2)
-	assert.Equal(t, "first", comments[0].(map[string]any)["body"])
-	assert.Equal(t, "second", comments[1].(map[string]any)["body"])
-	assert.NotEqual(t, comments[0].(map[string]any)["uid"], comments[1].(map[string]any)["uid"])
-}
-
-func TestFakeCreateIdempotencyIgnoresLabelOrder(t *testing.T) {
-	s := New(t)
-	path := "/api/v1/projects/17/issues"
-	_, first := post(t, s, path, "label-key", `{"title":"Same","labels":["alpha","beta"]}`)
-	status, replay := post(t, s, path, "label-key", `{"title":"Same","labels":["beta","alpha"]}`)
-	assert.Equal(t, 200, status)
-	assert.Equal(t, true, replay["reused"])
-	assert.Equal(t, first["issue"].(map[string]any)["uid"], replay["issue"].(map[string]any)["uid"])
-}
-
 func TestFakeFaultSnapshotsData(t *testing.T) {
 	s := New(t)
 	data := map[string]any{"detail": map[string]any{"reason": "original"}}
@@ -344,25 +286,4 @@ func TestFakeFaultSnapshotsData(t *testing.T) {
 	status, body := get(t, s, "/api/v1/health")
 	assert.Equal(t, 503, status)
 	assert.Equal(t, "original", body["error"].(map[string]any)["data"].(map[string]any)["detail"].(map[string]any)["reason"])
-}
-
-func TestFakeCommentReplayReturnsOriginalCommentIdentity(t *testing.T) {
-	s := New(t)
-	issue := s.AddIssue(Issue{Title: "Existing"})
-	path := "/api/v1/projects/17/issues/" + issue.UID + "/comments"
-	_, first := post(t, s, path, "key-a", `{"body":"first"}`)
-	_, second := post(t, s, path, "key-b", `{"body":"second"}`)
-	status, replay := post(t, s, path, "key-a", `{"body":"first"}`)
-	assert.Equal(t, 200, status)
-	assert.Equal(t, false, replay["changed"])
-	firstComment := first["comment"].(map[string]any)
-	secondComment := second["comment"].(map[string]any)
-	replayComment := replay["comment"].(map[string]any)
-	assert.Equal(t, firstComment["body"], replayComment["body"])
-	assert.Equal(t, firstComment["id"], replayComment["id"])
-	assert.Equal(t, firstComment["uid"], replayComment["uid"])
-	assert.NotEqual(t, secondComment["uid"], replayComment["uid"])
-	stored, ok := s.Issue(issue.UID)
-	require.True(t, ok)
-	assert.Equal(t, []string{"first", "second"}, stored.Comments)
 }

@@ -40,8 +40,13 @@ func NewConn(cfg Config) *Conn {
 func (c *Conn) Config() Config { return c.cfg }
 
 func (c *Conn) Status(ctx context.Context, fresh bool) Status {
+	asked := c.now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if fresh && !c.checked.IsZero() && !c.checked.Before(asked) {
+		// A probe finished while this caller waited; it is fresh enough.
+		return c.status
+	}
 	return c.statusLocked(ctx, fresh)
 }
 
@@ -60,7 +65,13 @@ func (c *Conn) VersionReady(requestCtx context.Context) bool {
 	if c.versionProbeRunning || requestCtx.Err() != nil {
 		return false
 	}
-	probeCtx, cancel := context.WithTimeout(requestCtx, versionProbeBudget)
+	// Leave the version response half of its deadline so a slow Kata cannot
+	// use up a short server write timeout.
+	budget := versionProbeBudget
+	if deadline, ok := requestCtx.Deadline(); ok {
+		budget = min(budget, time.Until(deadline)/2)
+	}
+	probeCtx, cancel := context.WithTimeout(requestCtx, budget)
 	defer cancel()
 	st := c.statusLocked(probeCtx, false)
 	if st.State != StateReady && probeCtx.Err() != nil {

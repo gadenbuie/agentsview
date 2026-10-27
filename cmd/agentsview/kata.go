@@ -16,6 +16,7 @@ import (
 	"go.kenn.io/agentsview/internal/config"
 	"go.kenn.io/agentsview/internal/friction/filing"
 	"go.kenn.io/agentsview/internal/kata"
+	"go.kenn.io/agentsview/internal/server"
 )
 
 var kataDaemonHTTPClient = &http.Client{
@@ -119,6 +120,14 @@ func fetchKataStatus(ctx context.Context, baseURL, token string, budget time.Dur
 	api, err := apiclient.NewHTTPClient(baseURL, token, &client)
 	if err != nil {
 		return kata.Status{}, errors.New("kata status request failed: invalid server URL")
+	}
+	// An older daemon answers the unknown route with the web app, so check
+	// its API version first and say what to do.
+	if v, err := api.GetAPIV1VersionWithResponse(requestCtx); err == nil && v.JSON200 != nil &&
+		v.JSON200.APIVersion > 0 && v.JSON200.APIVersion < server.KataAPIVersion {
+		return kata.Status{}, fmt.Errorf(
+			"kata status request failed: server API version %d does not serve Kata status; restart or upgrade the server",
+			v.JSON200.APIVersion)
 	}
 	resp, err := api.GetAPIV1KataStatusWithResponse(requestCtx)
 	if err != nil {

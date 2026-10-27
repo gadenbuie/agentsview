@@ -108,7 +108,7 @@ func TestFindByMetadataDriftIsLoud(t *testing.T) {
 	}{
 		{name: "parse_list_response_malformed_json_is_loud_not_empty", body: "not json at all"},
 		{name: "parse_list_response_missing_issues_collection_is_loud", body: `{"kata_api_version":1,"items":[]}`},
-		{name: "parse_list_response_missing_status_is_loud", body: `{"issues":[{"uid":"01AAA","short_id":"ab12","title":"drifty","qualified_id":"agentsview#ab12"}]}`},
+		{name: "parse_list_response_missing_status_is_loud", body: `{"issues":[{"uid":"01J00000000000000000000008","short_id":"f008","project_id":17,"qualified_id":"agentsview#f008","metadata":{"friction.fingerprint":"fl1:x"}}]}`},
 		{name: "parse_list_response_issue_without_ref_is_loud", body: `{"issues":[{"title":"no refs here","status":"open"}]}`},
 	}
 	for _, tt := range tests {
@@ -505,7 +505,7 @@ func TestIssueResponsesRejectMalformedShortIDAlphabetAndLength(t *testing.T) {
 	}{
 		{name: "invalid_letter", value: "f00i"},
 		{name: "uppercase", value: "F008"},
-		{name: "control", value: "f0\\u0000"},
+		{name: "control", value: "f00\\u0000"},
 		{name: "too_short", value: "abc"},
 		{name: "too_long", value: "aaaaaaaaaaaaaaaaaaaaaaaaaaa"},
 	}
@@ -704,11 +704,11 @@ func TestIssueActionsValidateAcknowledgement(t *testing.T) {
 			_, err := c.Reopen(t.Context(), ref)
 			return err
 		}},
-		{name: "comment_missing_uid", suffix: "/comments", body: `{"changed":true,"issue":{"uid":"01J00000000000000000000008","short_id":"f008","project_id":17,"status":"open"},"comment":{"body":"Recurred"}}`, call: func(t *testing.T, c *Client, ref string) error {
+		{name: "comment_missing_uid", suffix: "/comments", body: `{"changed":true,"issue":{"id":42,"uid":"01J00000000000000000000008","short_id":"f008","project_id":17,"status":"open"},"comment":{"issue_id":42,"body":"Recurred"}}`, call: func(t *testing.T, c *Client, ref string) error {
 			t.Helper()
 			return c.Comment(t.Context(), ref, "comment-key", "Recurred")
 		}},
-		{name: "label_wrong_label", suffix: "/labels", body: `{"changed":true,"issue":{"uid":"01J00000000000000000000008","short_id":"f008","project_id":17,"status":"open"},"label":{"label":"other"}}`, call: func(t *testing.T, c *Client, ref string) error {
+		{name: "label_wrong_label", suffix: "/labels", body: `{"changed":true,"issue":{"id":42,"uid":"01J00000000000000000000008","short_id":"f008","project_id":17,"status":"open"},"label":{"issue_id":42,"label":"other"}}`, call: func(t *testing.T, c *Client, ref string) error {
 			t.Helper()
 			return c.AddLabel(t.Context(), ref, "friction:recurred")
 		}},

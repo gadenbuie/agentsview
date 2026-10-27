@@ -23,6 +23,7 @@ func TestNewClientEndpoints(t *testing.T) {
 	}{
 		{name: "https", endpoint: "https://kata.example.test/", wantBase: "https://kata.example.test"},
 		{name: "loopback_http", endpoint: "http://127.0.0.1:7777", wantBase: "http://127.0.0.1:7777"},
+		{name: "escaped_path", endpoint: "https://kata.example.test/kata%23hub/", wantBase: "https://kata.example.test/kata%23hub"},
 		{name: "remote_http_refused", endpoint: "http://kata.example.test", wantErr: "plaintext http"},
 		{name: "remote_http_allowed", cfg: Config{AllowInsecure: true}, endpoint: "http://kata.example.test", wantBase: "http://kata.example.test"},
 		{name: "unix", endpoint: "unix:///tmp/kata.sock", wantBase: "http://kata.invalid"},

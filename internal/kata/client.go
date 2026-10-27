@@ -153,7 +153,7 @@ func newClient(cfg Config, endpoint string) (*Client, error) {
 		if u.Scheme == "http" && !cfg.AllowInsecure && !isLoopback(u.Hostname()) {
 			return nil, fmt.Errorf("%w: plaintext http to a non-loopback host needs allow_insecure", ErrUnavailable)
 		}
-		base = strings.TrimRight(u.Scheme+"://"+u.Host+u.Path, "/")
+		base = strings.TrimRight(u.Scheme+"://"+u.Host+u.EscapedPath(), "/")
 	default:
 		return nil, fmt.Errorf("%w: endpoint must be unix://, https:// or http://", ErrUnavailable)
 	}
@@ -186,10 +186,14 @@ func buildHTTPClient(template *http.Client, socket string, timeout time.Duration
 		c = *template
 	}
 	if socket != "" {
-		c.Transport = &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			var d net.Dialer
-			return d.DialContext(ctx, "unix", socket)
-		}}
+		c.Transport = &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", socket)
+			},
+			// Each probe builds a client; idle sockets of replaced clients close.
+			IdleConnTimeout: connTTL,
+		}
 	}
 	c.Timeout = timeout
 	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
