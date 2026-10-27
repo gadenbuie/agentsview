@@ -8,6 +8,14 @@ env:
   GOFLAGS: -trimpath
 
 on:
+  pull_request:
+    paths:
+      - 'cmd/**'
+      - 'internal/**'
+      - 'testdata/golden/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/ci-macos-main.yml'
   push:
     branches: [main]
     paths:

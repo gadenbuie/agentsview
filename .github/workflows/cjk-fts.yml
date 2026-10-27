@@ -12,18 +12,20 @@ on:
     paths:
       - ".github/workflows/cjk-fts.yml"
       - "Makefile"
-      - "internal/db/**"
-      - "internal/service/**"
-      - "internal/mcp/**"
+      - "internal/**"
+      - "docs/**"
+      - "go.mod"
+      - "go.sum"
       - "scripts/build-simple-fts.sh"
   push:
     branches: [main]
     paths:
       - ".github/workflows/cjk-fts.yml"
       - "Makefile"
-      - "internal/db/**"
-      - "internal/service/**"
-      - "internal/mcp/**"
+      - "internal/**"
+      - "docs/**"
+      - "go.mod"
+      - "go.sum"
       - "scripts/build-simple-fts.sh"
 
 concurrency:
