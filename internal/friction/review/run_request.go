@@ -23,9 +23,15 @@ func (r *Runner) LatestCompleteDate() string {
 }
 
 // Run catches up when called with no options, or builds one requested date.
-func (r *Runner) Run(ctx context.Context, req RunRequest) ([]Report, error) {
+// exclusive serializes each day's build with sync, as the scheduled job does;
+// nil runs the work directly. onReport receives each written catch-up report,
+// or the one requested date's report, so callers keep only what they need.
+func (r *Runner) Run(
+	ctx context.Context, req RunRequest,
+	exclusive func(func() error) error, onReport func(Report),
+) error {
 	if req.Date == "" && !req.Rebuild && !req.DryRun {
-		return r.CatchUp(ctx)
+		return r.catchUp(ctx, exclusive, onReport)
 	}
 	latest := r.LatestCompleteDate()
 	date := req.Date
@@ -34,14 +40,23 @@ func (r *Runner) Run(ctx context.Context, req RunRequest) ([]Report, error) {
 	}
 	parsed, err := time.Parse(time.DateOnly, date)
 	if err != nil || parsed.Format(time.DateOnly) != date {
-		return nil, fmt.Errorf("%w: %q is not YYYY-MM-DD", ErrInvalidRunDate, date)
+		return fmt.Errorf("%w: %q is not YYYY-MM-DD", ErrInvalidRunDate, date)
 	}
 	if date > latest {
-		return nil, fmt.Errorf("%w: %s is not a complete local day (latest is %s)", ErrInvalidRunDate, date, latest)
+		return fmt.Errorf("%w: %s is not a complete local day (latest is %s)", ErrInvalidRunDate, date, latest)
 	}
-	report, err := r.BuildDate(ctx, date, BuildOptions{Rebuild: req.Rebuild, DryRun: req.DryRun})
-	if err != nil {
-		return nil, err
+	work := func() error {
+		report, err := r.BuildDate(ctx, date, BuildOptions{Rebuild: req.Rebuild, DryRun: req.DryRun})
+		if err != nil {
+			return err
+		}
+		if onReport != nil {
+			onReport(report)
+		}
+		return nil
 	}
-	return []Report{report}, nil
+	if exclusive == nil {
+		return work()
+	}
+	return exclusive(work)
 }

@@ -170,6 +170,8 @@ func TestListFrictionPatterns(t *testing.T) {
 		{"ranked", FrictionPatternFilter{}, []string{"fl1:bbb", "fl1:aaa", "fl1:ccc"}, ""},
 		{"kind", FrictionPatternFilter{Kind: "pattern"}, []string{"fl1:ccc"}, ""},
 		{"since", FrictionPatternFilter{Since: "2026-09-14"}, []string{"fl1:bbb", "fl1:aaa"}, ""},
+		{"fingerprints", FrictionPatternFilter{Fingerprints: []string{"fl1:ccc", "fl1:aaa", "fl1:missing"}}, []string{"fl1:aaa", "fl1:ccc"}, ""},
+		{"no_fingerprints", FrictionPatternFilter{Fingerprints: []string{}}, []string{}, ""},
 		{"page", FrictionPatternFilter{Limit: 1}, []string{"fl1:bbb"}, "1"},
 		{"page_two", FrictionPatternFilter{Limit: 2, Cursor: "1"}, []string{"fl1:aaa", "fl1:ccc"}, ""},
 	}

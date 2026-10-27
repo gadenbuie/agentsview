@@ -95,10 +95,11 @@ type frictionDigestResponse struct {
 	Revision        int               `json:"revision"`
 	SessionsScanned int               `json:"sessions_scanned"`
 	MarkdownSHA256  string            `json:"markdown_sha256"`
-	WebURL          string            `json:"web_url"`
 	Summary         frictionSummary   `json:"summary"`
 	Signals         []frictionSignal  `json:"signals"`
 	P0Alerts        []frictionP0Alert `json:"p0_alerts"`
+	// Patterns are the recurrence rows for this digest's findings.
+	Patterns []frictionPatternItem `json:"patterns"`
 }
 
 // frictionSummary mirrors the stored summary JSON (friction.RenderSummaryJSON).
@@ -322,6 +323,45 @@ func (s *Server) frictionDigestByDate(ctx context.Context, date string) (*db.Fri
 	return d, nil
 }
 
+func frictionPatternItems(rows []db.FrictionPattern) []frictionPatternItem {
+	out := make([]frictionPatternItem, 0, len(rows))
+	for _, p := range rows {
+		out = append(out, frictionPatternItem{
+			Fingerprint: p.Fingerprint, Kind: p.Kind, Title: p.Title,
+			FirstSeenDate: p.FirstSeenDate, LastSeenDate: p.LastSeenDate,
+			OccurrenceCount: p.OccurrenceCount, SessionCount: p.SessionCount,
+			LastSubjectID: p.LastSubjectID, LastOrdinal: p.LastOrdinal,
+		})
+	}
+	return out
+}
+
+// frictionDigestPatterns returns the recurrence rows for the fingerprints in
+// a digest's signals, so readers need not page through every pattern.
+func frictionDigestPatterns(
+	ctx context.Context, fr db.FrictionReader, sigs []friction.Signal,
+) ([]db.FrictionPattern, error) {
+	seen := make(map[string]bool, len(sigs))
+	fingerprints := make([]string, 0, len(sigs))
+	for _, sig := range sigs {
+		if fp := sig.Fingerprint(); !seen[fp] {
+			seen[fp] = true
+			fingerprints = append(fingerprints, fp)
+		}
+	}
+	out := []db.FrictionPattern{}
+	for chunk := range slices.Chunk(fingerprints, db.MaxFrictionFingerprints) {
+		rows, _, err := fr.ListFrictionPatterns(ctx, db.FrictionPatternFilter{
+			Fingerprints: chunk, Limit: len(chunk),
+		})
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, rows...)
+	}
+	return out, nil
+}
+
 // --- handlers ---
 
 func (s *Server) humaListFrictionDigests(
@@ -363,16 +403,21 @@ func (s *Server) humaGetFrictionDigest(
 	if err != nil {
 		return nil, internalError("friction digest "+d.Date, err)
 	}
-	base := s.frictionPublicURL()
+	fr, err := s.frictionReader()
+	if err != nil {
+		return nil, err
+	}
+	patterns, err := frictionDigestPatterns(ctx, fr, snap.Signals)
+	if err != nil {
+		return nil, frictionStoreError("friction digest patterns", err)
+	}
 	resp := frictionDigestResponse{
 		Date: d.Date, Timezone: d.Timezone, RulesVersion: d.RulesVersion,
 		BuiltAt: d.BuiltAt.UTC(), Revision: d.Revision, SessionsScanned: d.SessionsScanned,
 		MarkdownSHA256: d.MarkdownSHA256, Summary: summary,
-		Signals:  frictionSignalItems(snap.Signals, base),
+		Signals:  frictionSignalItems(snap.Signals, s.frictionPublicURL()),
 		P0Alerts: frictionP0AlertItems(snap.P0Alerts),
-	}
-	if base != "" {
-		resp.WebURL = base + "/friction/" + d.Date
+		Patterns: frictionPatternItems(patterns),
 	}
 	return &jsonOutput[frictionDigestResponse]{Body: resp}, nil
 }
@@ -453,17 +498,8 @@ func (s *Server) humaListFrictionPatterns(
 	if err != nil {
 		return nil, frictionStoreError("list friction patterns", err)
 	}
-	out := make([]frictionPatternItem, 0, len(rows))
-	for _, p := range rows {
-		out = append(out, frictionPatternItem{
-			Fingerprint: p.Fingerprint, Kind: p.Kind, Title: p.Title,
-			FirstSeenDate: p.FirstSeenDate, LastSeenDate: p.LastSeenDate,
-			OccurrenceCount: p.OccurrenceCount, SessionCount: p.SessionCount,
-			LastSubjectID: p.LastSubjectID, LastOrdinal: p.LastOrdinal,
-		})
-	}
 	return &jsonOutput[frictionPatternsResponse]{
-		Body: frictionPatternsResponse{Patterns: out, NextCursor: next},
+		Body: frictionPatternsResponse{Patterns: frictionPatternItems(rows), NextCursor: next},
 	}, nil
 }
 
@@ -474,19 +510,20 @@ func (s *Server) humaRunFrictionReview(
 		return nil, apiError(http.StatusForbidden,
 			"friction review runs require auth or a localhost request")
 	}
-	runner, exclusive := s.frictionRunner, s.frictionExclusive
+	runner := s.frictionRunner
 	if runner == nil {
 		return nil, apiError(http.StatusServiceUnavailable, "friction review is not enabled")
 	}
-	if exclusive == nil {
-		exclusive = func(f func() error) error { return f() }
-	}
 	req := review.RunRequest{Date: in.Body.Date, Rebuild: in.Body.Rebuild, DryRun: in.Body.DryRun}
-	var reports []review.Report
-	err := exclusive(func() error {
-		var runErr error
-		reports, runErr = runner.Run(ctx, req)
-		return runErr
+	out := []frictionRunReport{}
+	var decodeErr error
+	err := runner.Run(ctx, req, s.frictionExclusive, func(rep review.Report) {
+		summary, err := decodeFrictionSummary(friction.RenderSummaryJSON(rep.Snapshot.DigestSnapshot))
+		if err != nil {
+			decodeErr = errors.Join(decodeErr, err)
+			return
+		}
+		out = append(out, frictionRunReport{Date: rep.Date, Written: rep.Written, Summary: summary})
 	})
 	if errors.Is(err, review.ErrInvalidRunDate) {
 		return nil, apiError(http.StatusBadRequest, err.Error())
@@ -497,16 +534,8 @@ func (s *Server) humaRunFrictionReview(
 	if handled := handleHumaReadOnly(err); handled != nil {
 		return nil, handled
 	}
-	if err != nil {
+	if err = errors.Join(err, decodeErr); err != nil {
 		return nil, internalError("friction review", err)
-	}
-	out := make([]frictionRunReport, 0, len(reports))
-	for _, rep := range reports {
-		summary, err := decodeFrictionSummary(friction.RenderSummaryJSON(rep.Snapshot.DigestSnapshot))
-		if err != nil {
-			return nil, internalError("friction review", err)
-		}
-		out = append(out, frictionRunReport{Date: rep.Date, Written: rep.Written, Summary: summary})
 	}
 	return &jsonOutput[frictionRunResponse]{Body: frictionRunResponse{Reports: out}}, nil
 }

@@ -41,13 +41,13 @@ func TestRunnerRun(t *testing.T) {
 	}
 	for _, tt := range invalid {
 		t.Run("rejects_"+tt.name, func(t *testing.T) {
-			_, err := newRunner(t).Run(t.Context(), tt.req)
+			err := newRunner(t).Run(t.Context(), tt.req, nil, nil)
 			require.ErrorIs(t, err, ErrInvalidRunDate)
 		})
 	}
 	t.Run("dry_run_without_date_targets_yesterday_and_writes_nothing", func(t *testing.T) {
 		r := newRunner(t)
-		reports, err := r.Run(t.Context(), RunRequest{DryRun: true})
+		reports, err := runReports(t, r, RunRequest{DryRun: true})
 		require.NoError(t, err)
 		require.Len(t, reports, 1)
 		assert.Equal(t, "2026-09-15", reports[0].Date)
@@ -58,20 +58,20 @@ func TestRunnerRun(t *testing.T) {
 	})
 	t.Run("explicit_date_builds_once", func(t *testing.T) {
 		r := newRunner(t)
-		reports, err := r.Run(t.Context(), RunRequest{Date: "2026-09-14"})
+		reports, err := runReports(t, r, RunRequest{Date: "2026-09-14"})
 		require.NoError(t, err)
 		require.Len(t, reports, 1)
 		assert.True(t, reports[0].Written)
-		again, err := r.Run(t.Context(), RunRequest{Date: "2026-09-14"})
+		again, err := runReports(t, r, RunRequest{Date: "2026-09-14"})
 		require.NoError(t, err)
 		require.Len(t, again, 1)
 		assert.False(t, again[0].Written)
 	})
-	t.Run("empty_request_is_catch_up", func(t *testing.T) {
-		reports, err := newRunner(t).Run(t.Context(), RunRequest{})
-		require.NoError(t, err)
-		for _, rep := range reports {
-			assert.Less(t, rep.Date, "2026-09-16")
-		}
-	})
+}
+
+func runReports(t *testing.T, r *Runner, req RunRequest) ([]Report, error) {
+	t.Helper()
+	var reports []Report
+	err := r.Run(t.Context(), req, nil, func(rep Report) { reports = append(reports, rep) })
+	return reports, err
 }

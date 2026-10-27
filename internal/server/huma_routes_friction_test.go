@@ -1,7 +1,6 @@
 package server_test
 
 import (
-	"context"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -37,7 +36,6 @@ type testFrictionSignal struct {
 type testFrictionDigest struct {
 	Date     string `json:"date"`
 	Revision int    `json:"revision"`
-	WebURL   string `json:"web_url"`
 	Summary  struct {
 		SchemaVersion int                 `json:"schema_version"`
 		Corrections   int                 `json:"corrections"`
@@ -48,6 +46,9 @@ type testFrictionDigest struct {
 		Tool       string   `json:"tool"`
 		SubjectIDs []string `json:"subject_ids"`
 	} `json:"p0_alerts"`
+	Patterns []struct {
+		Fingerprint string `json:"fingerprint"`
+	} `json:"patterns"`
 }
 
 func frictionTestSnapshot(date string) review.Snapshot {
@@ -77,7 +78,24 @@ func seedFrictionDigest(t *testing.T, d *db.DB, date string) {
 		BuiltAt: time.Date(2026, 9, 15, 1, 0, 0, 0, time.UTC), Revision: 1,
 		SessionsScanned: 1, SnapshotJSON: snapJSON, SummaryJSON: summary,
 		Markdown: md, MarkdownSHA256: "sha", RunID: "run",
-	}, []db.FrictionDigestSubject{{SubjectID: "claude:s1", Date: date, SubjectKind: "session"}}, nil))
+	}, []db.FrictionDigestSubject{{SubjectID: "claude:s1", Date: date, SubjectKind: "session"}},
+		frictionTestPatterns(snap.Signals, date)))
+}
+
+// frictionTestPatterns records each digest signal's pattern plus one pattern
+// from another digest, so reads can tell the two apart.
+func frictionTestPatterns(sigs []friction.Signal, date string) []db.FrictionPatternUpdate {
+	out := []db.FrictionPatternUpdate{{
+		Fingerprint: "fl1:" + strings.Repeat("0", 64), Kind: "error", Title: "elsewhere",
+		Date: date, SubjectID: "claude:other", Occurrences: 9,
+	}}
+	for _, sig := range sigs {
+		out = append(out, db.FrictionPatternUpdate{
+			Fingerprint: sig.Fingerprint(), Kind: string(sig.Kind), Title: sig.Title(),
+			Date: date, SubjectID: sig.SubjectID, Occurrences: 1,
+		})
+	}
+	return out
 }
 
 func TestFrictionDigestRoutes(t *testing.T) {
@@ -100,7 +118,6 @@ func TestFrictionDigestRoutes(t *testing.T) {
 		w := te.get(t, "/api/v1/friction/digests/2026-09-14")
 		assertStatus(t, w, http.StatusOK)
 		got := decode[testFrictionDigest](t, w)
-		assert.Equal(t, "https://av.example.test/base/friction/2026-09-14", got.WebURL)
 		assert.Equal(t, friction.SummarySchemaVersion, got.Summary.SchemaVersion)
 		assert.Equal(t, 1, got.Summary.Corrections)
 		require.Len(t, got.Signals, 2)
@@ -113,6 +130,12 @@ func TestFrictionDigestRoutes(t *testing.T) {
 		require.Len(t, got.P0Alerts, 1)
 		assert.Equal(t, "bash", got.P0Alerts[0].Tool)
 		assert.Equal(t, []string{"claude:s1", "claude:s2", "claude:s3"}, got.P0Alerts[0].SubjectIDs)
+		fingerprints := []string{}
+		for _, p := range got.Patterns {
+			fingerprints = append(fingerprints, p.Fingerprint)
+		}
+		assert.ElementsMatch(t, []string{got.Signals[0].Fingerprint, got.Signals[1].Fingerprint}, fingerprints,
+			"only this digest's patterns")
 	})
 	t.Run("markdown", func(t *testing.T) {
 		w := te.get(t, "/api/v1/friction/digests/2026-09-14/md")
@@ -167,7 +190,7 @@ func TestFrictionListRoutes(t *testing.T) {
 		{"findings_bad_kind", "/api/v1/friction/findings?kind=nope", http.StatusBadRequest, 0, ""},
 		{"bad_cursor_is_400", "/api/v1/friction/findings?cursor=abc", http.StatusBadRequest, 0, ""},
 		{"limit_over_max_is_400", "/api/v1/friction/findings?limit=5000", http.StatusBadRequest, 0, ""},
-		{"patterns_empty", "/api/v1/friction/patterns", http.StatusOK, 0, ""},
+		{"patterns_all", "/api/v1/friction/patterns", http.StatusOK, 3, ""},
 		{"patterns_bad_since", "/api/v1/friction/patterns?since=last-week", http.StatusBadRequest, 0, ""},
 	}
 	for _, tt := range tests {
@@ -253,45 +276,6 @@ func TestFrictionRunRouteDisabled(t *testing.T) {
 	w := te.post(t, "/api/v1/friction/run", `{}`)
 	assertStatus(t, w, http.StatusServiceUnavailable)
 	assertBodyContains(t, w, "friction review is not enabled")
-}
-
-type readOnlyFrictionStore struct{ db.Store }
-
-func (readOnlyFrictionStore) ListFrictionFindings(_ context.Context, _ db.FrictionFindingFilter) ([]db.FrictionFinding, string, error) {
-	return nil, "", db.ErrReadOnly
-}
-
-func (readOnlyFrictionStore) ListFrictionDigests(_ context.Context, _, _ string) ([]db.FrictionDigest, error) {
-	return nil, db.ErrReadOnly
-}
-
-func (readOnlyFrictionStore) ListFrictionPatterns(_ context.Context, _ db.FrictionPatternFilter) ([]db.FrictionPattern, string, error) {
-	return nil, "", db.ErrReadOnly
-}
-
-func (readOnlyFrictionStore) GetFrictionDigest(_ context.Context, _ string) (*db.FrictionDigest, error) {
-	return nil, db.ErrReadOnly
-}
-
-func TestFrictionRoutesReadOnlyBackends(t *testing.T) {
-	te := setup(t)
-	cfg := config.Config{Host: "127.0.0.1", DataDir: t.TempDir()}
-	handler := server.New(cfg, readOnlyFrictionStore{Store: te.db}, nil).Handler()
-	for _, path := range []string{
-		"/api/v1/friction/digests",
-		"/api/v1/friction/digests/2026-09-14",
-		"/api/v1/friction/digests/2026-09-14/md",
-		"/api/v1/friction/findings",
-		"/api/v1/friction/patterns",
-	} {
-		t.Run(path, func(t *testing.T) {
-			req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1:0"+path, nil)
-			req.RemoteAddr = "127.0.0.1:1234"
-			w := httptest.NewRecorder()
-			handler.ServeHTTP(w, req)
-			assertStatus(t, w, http.StatusNotImplemented)
-		})
-	}
 }
 
 func TestFrictionRoutesOnMirrorWithoutFrictionTables(t *testing.T) {

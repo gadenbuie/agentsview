@@ -140,6 +140,12 @@ func (s *Store) ListFrictionPatterns(
 	if f.Since != "" {
 		preds = append(preds, "last_seen_date >= "+pb.add(f.Since))
 	}
+	if f.Fingerprints != nil {
+		if len(f.Fingerprints) == 0 {
+			return []db.FrictionPattern{}, "", nil
+		}
+		preds = append(preds, "fingerprint = ANY("+pb.add(f.Fingerprints)+")")
+	}
 	where := ""
 	if len(preds) > 0 {
 		where = "WHERE " + strings.Join(preds, " AND ")

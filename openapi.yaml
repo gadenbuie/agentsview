@@ -5010,6 +5010,10 @@ components:
           items:
             $ref: "#/components/schemas/FrictionP0Alert"
           type: array
+        patterns:
+          items:
+            $ref: "#/components/schemas/FrictionPatternItem"
+          type: array
         revision:
           format: int64
           type: integer
@@ -5026,8 +5030,6 @@ components:
           $ref: "#/components/schemas/FrictionSummary"
         timezone:
           type: string
-        web_url:
-          type: string
       required:
         - date
         - timezone
@@ -5036,10 +5038,10 @@ components:
         - revision
         - sessions_scanned
         - markdown_sha256
-        - web_url
         - summary
         - signals
         - p0_alerts
+        - patterns
       type: object
     FrictionDigestsResponse:
       additionalProperties: false

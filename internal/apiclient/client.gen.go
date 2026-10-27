@@ -26392,17 +26392,17 @@ func (f FrictionDigestItem) Validate() error {
 }
 
 type FrictionDigestResponse struct {
-	BuiltAt         time.Time         `json:"built_at" validate:"required"`
-	Date            string            `json:"date" validate:"required"`
-	MarkdownSha256  string            `json:"markdown_sha256" validate:"required"`
-	P0Alerts        []FrictionP0Alert `json:"p0_alerts" validate:"required"`
-	Revision        int64             `json:"revision"`
-	RulesVersion    string            `json:"rules_version" validate:"required"`
-	SessionsScanned int64             `json:"sessions_scanned"`
-	Signals         []FrictionSignal  `json:"signals" validate:"required"`
-	Summary         FrictionSummary   `json:"summary"`
-	Timezone        string            `json:"timezone" validate:"required"`
-	WebURL          string            `json:"web_url" validate:"required"`
+	BuiltAt         time.Time             `json:"built_at" validate:"required"`
+	Date            string                `json:"date" validate:"required"`
+	MarkdownSha256  string                `json:"markdown_sha256" validate:"required"`
+	P0Alerts        []FrictionP0Alert     `json:"p0_alerts" validate:"required"`
+	Patterns        []FrictionPatternItem `json:"patterns" validate:"required"`
+	Revision        int64                 `json:"revision"`
+	RulesVersion    string                `json:"rules_version" validate:"required"`
+	SessionsScanned int64                 `json:"sessions_scanned"`
+	Signals         []FrictionSignal      `json:"signals" validate:"required"`
+	Summary         FrictionSummary       `json:"summary"`
+	Timezone        string                `json:"timezone" validate:"required"`
 }
 
 func (f FrictionDigestResponse) Validate() error {
@@ -26423,6 +26423,13 @@ func (f FrictionDigestResponse) Validate() error {
 			}
 		}
 	}
+	for i, item := range f.Patterns {
+		if v, ok := any(item).(runtime.Validator); ok {
+			if err := v.Validate(); err != nil {
+				errors = errors.Append(fmt.Sprintf("Patterns[%d]", i), err)
+			}
+		}
+	}
 	if err := typesValidator.Var(f.RulesVersion, "required"); err != nil {
 		errors = errors.Append("RulesVersion", err)
 	}
@@ -26440,9 +26447,6 @@ func (f FrictionDigestResponse) Validate() error {
 	}
 	if err := typesValidator.Var(f.Timezone, "required"); err != nil {
 		errors = errors.Append("Timezone", err)
-	}
-	if err := typesValidator.Var(f.WebURL, "required"); err != nil {
-		errors = errors.Append("WebURL", err)
 	}
 	if len(errors) == 0 {
 		return nil

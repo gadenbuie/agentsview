@@ -303,3 +303,23 @@ func TestCatchUpBuildsDeferredDateAfterBudgetSkip(t *testing.T) {
 	assert.Zero(t, got.SessionsScanned)
 	assert.Equal(t, 1, stored(t, d, "2026-09-21").Revision)
 }
+
+func TestRunWithoutOptionsCatchesUpOneLockPerDay(t *testing.T) {
+	d := dbtest.OpenTestDB(t)
+	r := newRunner(d)
+	r.BackfillDays = 3
+	seed(t, d, subject{id: "old", ended: "2026-09-01T10:00:00Z"})
+	locks := 0
+	exclusive := func(work func() error) error {
+		locks++
+		return work()
+	}
+	var dates []string
+	err := r.Run(t.Context(), review.RunRequest{}, exclusive, func(rep review.Report) {
+		assert.True(t, rep.Written, rep.Date)
+		dates = append(dates, rep.Date)
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"2026-09-19", "2026-09-20", "2026-09-21"}, dates)
+	assert.Equal(t, 3, locks, "each day takes the lock on its own")
+}

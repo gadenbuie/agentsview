@@ -51,13 +51,19 @@ type FrictionFindingFilter struct {
 }
 
 // FrictionPatternFilter narrows ListFrictionPatterns. Since keeps patterns
-// whose last_seen_date is on or after the given date.
+// whose last_seen_date is on or after the given date. A non-nil Fingerprints
+// keeps only those patterns; callers keep it within MaxFrictionFingerprints.
 type FrictionPatternFilter struct {
-	Kind   string
-	Since  string
-	Limit  int
-	Cursor string
+	Kind         string
+	Since        string
+	Fingerprints []string
+	Limit        int
+	Cursor       string
 }
+
+// MaxFrictionFingerprints bounds one fingerprint filter, keeping SQLite and
+// PostgreSQL bind parameters small.
+const MaxFrictionFingerprints = 500
 
 // NormalizeFrictionLimit maps an unset or out-of-range page size to the default.
 func NormalizeFrictionLimit(n int) int {
@@ -240,6 +246,15 @@ func (db *DB) ListFrictionPatterns(
 	if f.Since != "" {
 		preds = append(preds, "last_seen_date >= ?")
 		args = append(args, f.Since)
+	}
+	if f.Fingerprints != nil {
+		if len(f.Fingerprints) == 0 {
+			return []FrictionPattern{}, "", nil
+		}
+		preds = append(preds, "fingerprint IN ("+strings.TrimSuffix(strings.Repeat("?,", len(f.Fingerprints)), ",")+")")
+		for _, fp := range f.Fingerprints {
+			args = append(args, fp)
+		}
 	}
 	where := ""
 	if len(preds) > 0 {

@@ -179,10 +179,12 @@ func TestFrictionListParity(t *testing.T) {
 	}
 
 	patternFilters := map[string]db.FrictionPatternFilter{
-		"all":   {},
-		"kind":  {Kind: "pattern"},
-		"since": {Since: "2026-09-14"},
-		"page":  {Limit: 1},
+		"all":             {},
+		"kind":            {Kind: "pattern"},
+		"since":           {Since: "2026-09-14"},
+		"page":            {Limit: 1},
+		"fingerprints":    {Fingerprints: []string{"fl1:ccc", "fl1:aaa", "fl1:missing"}},
+		"no_fingerprints": {Fingerprints: []string{}},
 	}
 	for name, f := range patternFilters {
 		t.Run("patterns_"+name, func(t *testing.T) {
