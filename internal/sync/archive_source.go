@@ -7,6 +7,7 @@ import (
 
 	"go.kenn.io/agentsview/internal/db"
 	"go.kenn.io/agentsview/internal/ingest"
+	"go.kenn.io/agentsview/internal/parser"
 )
 
 func (e *Engine) sessionArchiveProvenance(session *db.Session, native string) (*db.ArchiveSessionProvenance, error) {
@@ -18,6 +19,40 @@ func (e *Engine) sessionArchiveProvenance(session *db.Session, native string) (*
 		return nil, err
 	}
 	return &p, nil
+}
+
+// Check the whole result set before staging freshness or other session writes:
+// one foreign DAG member must leave every existing member unchanged.
+func (e *Engine) validateArchiveResultOwnership(ctx context.Context, results []parser.ParseResult) error {
+	if e.archiveWriteProvenance == nil {
+		return nil
+	}
+	baseline := e.db
+	if old, ok := e.archiveStore.(*db.DB); ok {
+		baseline = old
+	}
+	for _, result := range results {
+		session, err := ingest.ConvertSessionContext(ctx, result.Session, nil)
+		if err != nil {
+			return err
+		}
+		if err := e.applyRemoteRewritesContext(ctx, &session, nil); err != nil {
+			return err
+		}
+		provenance, err := e.archiveWriteProvenance(&session, result.Session.ID)
+		if err != nil {
+			return err
+		}
+		if baseline != e.db {
+			if err := baseline.CheckExistingArchiveProvenance(ctx, session.ID, provenance); err != nil {
+				return err
+			}
+		}
+		if err := e.db.CheckArchiveSessionProvenance(ctx, session, provenance); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (e *Engine) writeAttachedStaged(ctx context.Context, prepared ingest.PreparedSession, pw pendingWrite, provenance *db.ArchiveSessionProvenance) error {
@@ -72,16 +107,7 @@ func (e *Engine) SyncAttachedSource(ctx context.Context, source db.ArchiveSource
 					return keep, err
 				}
 			}
-			p, err := cfg.ArchiveWriteProvenance(session, native)
-			if err != nil {
-				return false, err
-			}
-			if baseline != e.db {
-				if err := baseline.CheckExistingArchiveProvenance(ctx, session.ID, p); err != nil {
-					return false, err
-				}
-			}
-			return true, e.db.CheckArchiveSessionProvenance(ctx, *session, p)
+			return true, nil
 		}
 		cfg.ParserExclusionPolicy = func(ctx context.Context, ids []string) error {
 			for _, id := range ids {

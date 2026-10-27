@@ -10999,6 +10999,13 @@ func (e *Engine) collectAndBatchWithOptions(
 			r.releaseAll()
 			continue
 		}
+		if err := e.validateArchiveResultOwnership(ctx, r.results); err != nil {
+			log.Printf("validate archive result ownership: %v", err)
+			stats.RecordFailed()
+			e.noteSQLiteContainerResult(r.containerResultPath(), false)
+			r.releaseAll()
+			continue
+		}
 		sourceAllowsParserExclusions := e.sourceAllowsParserExclusions(
 			r.processResult,
 		)
