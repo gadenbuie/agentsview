@@ -46,7 +46,8 @@ func (r *Runner) Run(
 		return fmt.Errorf("%w: %s is not a complete local day (latest is %s)", ErrInvalidRunDate, date, latest)
 	}
 	work := func() error {
-		report, err := r.BuildDate(ctx, date, BuildOptions{Rebuild: req.Rebuild, DryRun: req.DryRun})
+		// A preview of a built day keeps that day's sessions, as a rebuild does.
+		report, err := r.BuildDate(ctx, date, BuildOptions{Rebuild: req.Rebuild || req.DryRun, DryRun: req.DryRun})
 		if err != nil {
 			return err
 		}
