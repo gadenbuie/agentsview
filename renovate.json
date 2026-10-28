@@ -66,6 +66,14 @@
       "matchManagers": ["npm"],
       "matchPackageNames": ["typescript"],
       "allowedVersions": "<7"
+    },
+    {
+      "description": [
+        "rawcapture passes modernc.org/sqlite's *libc.TLS to sqlite3 calls, so libc must match the major version modernc.org/sqlite requires (v1). libc v2 also ships no Windows port."
+      ],
+      "matchManagers": ["gomod"],
+      "matchPackageNames": ["modernc.org/libc"],
+      "allowedVersions": "<2"
     }
   ]
 }
