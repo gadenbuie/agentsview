@@ -15,13 +15,35 @@ func (f importOnlyProviderFactory) Definition() AgentDef {
 }
 
 func (f importOnlyProviderFactory) Capabilities() Capabilities {
-	return Capabilities{}
+	return Capabilities{Content: importOnlyContentCapabilities(f.def.Type)}
+}
+
+// importOnlyContentCapabilities declares what each export parser extracts.
+// Chat app exports have no working directory or git branch.
+func importOnlyContentCapabilities(agent AgentType) ContentCapabilities {
+	caps := ContentCapabilities{
+		FirstMessage: CapabilitySupported,
+		SessionName:  CapabilitySupported,
+		Cwd:          CapabilityNotApplicable,
+		GitBranch:    CapabilityNotApplicable,
+	}
+	switch agent {
+	case AgentChatGPT:
+		caps.Thinking = CapabilitySupported
+		caps.ToolCalls = CapabilitySupported
+		caps.ToolResultEvents = CapabilitySupported
+		caps.Model = CapabilitySupported
+	case AgentClaudeAI:
+		caps.Thinking = CapabilitySupported
+	}
+	return caps
 }
 
 func (f importOnlyProviderFactory) NewProvider(cfg ProviderConfig) Provider {
 	cfg = cfg.Clone()
 	base := importOnlyProvider{
 		Def:    cloneAgentDef(f.def),
+		Caps:   f.Capabilities(),
 		Config: cfg,
 	}
 

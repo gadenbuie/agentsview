@@ -74,6 +74,10 @@ func TestAgentsCommandJSONReportsAgentDetails(t *testing.T) {
 	assert.False(t, claude.ImportOnly)
 
 	assert.True(t, claudeAI.ImportOnly)
+	assert.Equal(t, "supported", claudeAI.Content["first_message"])
+	assert.Equal(t, "supported", claudeAI.Content["thinking"])
+	assert.Equal(t, "unsupported", claudeAI.Content["tool_calls"])
+	assert.Equal(t, "not_applicable", claudeAI.Content["cwd"])
 }
 
 func TestAgentsCommandHumanOutput(t *testing.T) {
