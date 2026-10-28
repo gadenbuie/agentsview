@@ -629,7 +629,9 @@ CREATE INDEX IF NOT EXISTS idx_provider_freshness_updated_at
 // subagents instead of forks, and stop a nested run from resolving to itself.
 // Re-parse Pi-format sources in place; source and session identities are
 // unchanged.)
-const dataVersion = 156
+// (157: capture Pi thinking level as reasoning effort. Re-parse Pi-format
+// sources in place; source and session identities are unchanged.)
+const dataVersion = 157
 
 const archiveOnlyVersionBase = 1 << 20
 

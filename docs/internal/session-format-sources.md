@@ -2743,6 +2743,18 @@ schemas keep their existing ordering behavior.
   shapes. Model IDs are present. Agentsview catalog-prices the tokens. Data
   version 81 reparses existing Pi-family archives after adding the flat
   `cacheWrite` spelling.
+- **Reasoning effort:** Assistant messages store the Pi thinking level as
+  `message.thinkingLevel`, written since Pi v0.99.0 (2026-09-29, upstream
+  commit `540e174c72`, "Virtual models"). Older logs carry only
+  `thinking_level_change` entries (`thinkingLevel`), which Pi has written since
+  its first releases and appends on every effective change, including model
+  switches. Pi types the stored value as a plain string, so Agentsview keeps
+  whatever string Pi wrote (`off` through `max` today) in `reasoning_effort`.
+  The inline value wins. Otherwise the latest `thinking_level_change` value
+  applies, which backfills older logs; logs with neither leave it empty. Only
+  assistant messages carry it. OMP writes the same entry type but may add a
+  `configured` selector and a null `thinkingLevel`; null is ignored. Data
+  version 151 reparses Pi-family archives to pick this up.
 - **Directory configuration:** Reverified 2026-09-09 against
   [config.ts](https://github.com/earendil-works/pi/blob/acaa253cc8e3f159e6100b6f3874861b1f0bfc99/packages/coding-agent/src/config.ts)
   and

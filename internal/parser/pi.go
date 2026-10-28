@@ -146,6 +146,7 @@ func parsePiLikeSession(
 		ordinal       int
 		userCount     int
 		currentModel  string
+		currentEffort string
 		assistantByID map[string]int
 	)
 	assistantByID = make(map[string]int)
@@ -209,8 +210,8 @@ func parsePiLikeSession(
 			case "assistant":
 				sourceParentUUID := resolveVisibleAncestor(parentID)
 				msg := parsePiAssistantMessage(
-					line, ordinal, currentModel, entryID,
-					sourceParentUUID, cwd,
+					line, ordinal, currentModel, currentEffort,
+					entryID, sourceParentUUID, cwd,
 				)
 				if msg == nil {
 					continue
@@ -256,6 +257,16 @@ func parsePiLikeSession(
 			}
 			if id := gjson.Get(line, "modelId").Str; id != "" {
 				currentModel = id
+			}
+
+		case "thinking_level_change":
+			if entryID != "" {
+				visibleAncestorByID[entryID] = resolveVisibleAncestor(
+					parentID,
+				)
+			}
+			if level := gjson.Get(line, "thinkingLevel").Str; level != "" {
+				currentEffort = level
 			}
 
 		case "compaction":
@@ -305,7 +316,7 @@ func parsePiLikeSession(
 					parentID,
 				)
 			}
-			// skip silently (e.g., thinking_level_change)
+			// skip silently (entry types with no visible content)
 		}
 	}
 
@@ -459,8 +470,10 @@ func parsePiUserMessage(
 // Returns nil if the entry is malformed. fallbackModel is the most
 // recent model id seen (from a prior assistant message or
 // model_change entry), used when this message has no inline model.
+// fallbackEffort is the most recent thinking_level_change value, used
+// when this message has no inline thinkingLevel.
 func parsePiAssistantMessage(
-	line string, ordinal int, fallbackModel, sourceUUID,
+	line string, ordinal int, fallbackModel, fallbackEffort, sourceUUID,
 	sourceParentUUID, sessionCwd string,
 ) *ParsedMessage {
 	var (
@@ -540,6 +553,7 @@ func parsePiAssistantMessage(
 		ToolCalls:        toolCalls,
 	}
 	applyPiTokenUsage(pm, line, fallbackModel)
+	applyPiReasoningEffort(pm, line, fallbackEffort)
 	return pm
 }
 
@@ -622,6 +636,18 @@ func applyPiTokenUsage(
 
 	usage := gjson.Get(line, "message.usage")
 	applyPiUsage(pm, usage)
+}
+
+// applyPiReasoningEffort records the thinking level Pi requested for an
+// assistant response. Newer Pi versions write it on the message as
+// thinkingLevel; older ones only append thinking_level_change entries, so
+// the most recent entry value fills in. The value is stored as Pi wrote it.
+func applyPiReasoningEffort(pm *ParsedMessage, line, fallback string) {
+	if level := gjson.Get(line, "message.thinkingLevel").Str; level != "" {
+		pm.ReasoningEffort = level
+	} else {
+		pm.ReasoningEffort = fallback
+	}
 }
 
 func applyPiUsage(pm *ParsedMessage, usage gjson.Result) {

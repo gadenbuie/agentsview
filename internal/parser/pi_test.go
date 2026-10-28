@@ -1166,3 +1166,71 @@ func TestPiProviderParsesNoUsageNoTokenUsage(t *testing.T) {
 	assert.Empty(t, msgs[0].TokenUsage,
 		"token usage left empty when message.usage absent")
 }
+
+func TestPiParserReasoningEffort(t *testing.T) {
+	header := `{"type":"session","id":"re-sess","timestamp":"2025-01-01T10:00:00Z","cwd":"/tmp"}` + "\n"
+	user := func(id string) string {
+		return `{"type":"message","id":"` + id + `","timestamp":"2025-01-01T10:00:01Z","message":{"role":"user","content":"hi"}}` + "\n"
+	}
+	asst := func(id, extra string) string {
+		return `{"type":"message","id":"` + id + `","timestamp":"2025-01-01T10:00:02Z","message":{"role":"assistant","content":"ok"` + extra + `}}` + "\n"
+	}
+	level := func(id, v string) string {
+		return `{"type":"thinking_level_change","id":"` + id + `","timestamp":"2025-01-01T10:00:00.5Z","thinkingLevel":"` + v + `"}` + "\n"
+	}
+
+	tests := []struct {
+		name string
+		body string
+		want []string // effort of each assistant message, in order
+	}{
+		{
+			name: "inline thinkingLevel",
+			body: user("u1") + asst("a1", `,"thinkingLevel":"high"`),
+			want: []string{"high"},
+		},
+		{
+			name: "values stored verbatim",
+			body: user("u1") + asst("a1", `,"thinkingLevel":"off"`) +
+				asst("a2", `,"thinkingLevel":"some-future-level"`),
+			want: []string{"off", "some-future-level"},
+		},
+		{
+			name: "change entry backfills messages without inline level",
+			body: level("t1", "low") + user("u1") + asst("a1", ""),
+			want: []string{"low"},
+		},
+		{
+			name: "inline level wins over change entry",
+			body: level("t1", "low") + user("u1") +
+				asst("a1", `,"thinkingLevel":"max"`),
+			want: []string{"max"},
+		},
+		{
+			name: "mid-session change applies to later messages only",
+			body: level("t1", "low") + user("u1") + asst("a1", "") +
+				level("t2", "xhigh") + user("u2") + asst("a2", ""),
+			want: []string{"low", "xhigh"},
+		},
+		{
+			name: "no level information stays empty",
+			body: user("u1") + asst("a1", ""),
+			want: []string{""},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, msgs := runPiParserTest(t, header+tc.body)
+			var got []string
+			for _, m := range msgs {
+				if m.Role == RoleAssistant {
+					got = append(got, m.ReasoningEffort)
+				} else {
+					assert.Empty(t, m.ReasoningEffort,
+						"only assistant messages carry effort")
+				}
+			}
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
