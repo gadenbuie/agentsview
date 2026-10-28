@@ -239,7 +239,13 @@ func (s *Server) frictionPublicURL() string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	base := strings.TrimRight(strings.TrimSpace(s.cfg.PublicURL), "/")
-	if base != "" && s.basePath != "" && !strings.HasSuffix(base, s.basePath) {
+	if base == "" || s.basePath == "" {
+		return base
+	}
+	// Compare paths only: a host such as https://agentsview must not count
+	// as already ending in /agentsview.
+	u, err := url.Parse(base)
+	if err != nil || !strings.HasSuffix(u.Path, s.basePath) {
 		base += s.basePath
 	}
 	return base
