@@ -450,7 +450,7 @@ type EngineConfig struct {
 	ArchiveSessionPolicy func(context.Context, *db.Session, string) (bool, error)
 	// ArchiveWriteProvenance commits source ownership with normalized content.
 	ArchiveWriteProvenance func(*db.Session, string) (db.ArchiveSessionProvenance, error)
-	// ParserExclusionPolicy validates exclusions before scratch rows are deleted.
+	// ParserExclusionPolicy validates exclusions before any session metadata changes.
 	ParserExclusionPolicy func(context.Context, []string) error
 
 	AgentDirs      map[parser.AgentType][]string
@@ -11003,8 +11003,8 @@ func (e *Engine) collectAndBatchWithOptions(
 		if !e.discardWritesOnCancel {
 			completionCtx = context.WithoutCancel(ctx)
 		}
-		if err := e.validateArchiveResultOwnership(completionCtx, r.results); err != nil {
-			log.Printf("validate archive result ownership: %v", err)
+		if err := e.validateSourceSessionOwnership(completionCtx, r.processResult); err != nil {
+			log.Printf("validate source session ownership: %v", err)
 			stats.RecordFailed()
 			e.noteSQLiteContainerResult(r.containerResultPath(), false)
 			r.releaseAll()
@@ -14469,11 +14469,6 @@ func (e *Engine) deleteParserExcludedSessions(ctx context.Context,
 
 	excluded := e.applyIDPrefixToSessionIDs(res.excludedSessionIDs)
 	if len(excluded) > 0 {
-		if e.parserExclusionPolicy != nil {
-			if err := e.parserExclusionPolicy(ctx, excluded); err != nil {
-				return nil, err
-			}
-		}
 		if _, err := e.db.DeleteParserExcludedSessions(ctx, excluded); err != nil {
 			return nil, err
 		}
@@ -21556,7 +21551,7 @@ func (e *Engine) processAndWriteSessionFile(
 		}
 		return false, sessionsChanged, res.err
 	}
-	if err := e.validateArchiveResultOwnership(ctx, res.results); err != nil {
+	if err := e.validateSourceSessionOwnership(ctx, res); err != nil {
 		return false, sessionsChanged, err
 	}
 	if res.sourceCwdResolution.State != parser.SourceCwdUnspecified {

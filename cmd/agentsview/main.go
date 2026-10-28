@@ -2401,11 +2401,19 @@ func startFileWatcher(
 			len(unwatchedDirs), unwatchedPollInterval,
 		)
 	}
-	if err := watcher.StartCollecting(); err != nil {
-		log.Printf("warning: file watcher startup failed: %v", err)
-	}
+	flushPending = startWatcherCollection(watcher.StartCollecting, watcher.FlushPending)
 	return watcher.Stop, watcher.OpenDispatch, unwatchedDirs,
-		watcher.QueueRetryBatch, watcher.FlushPending
+		watcher.QueueRetryBatch, flushPending
+}
+
+func startWatcherCollection(start func() error, flush func(context.Context) error) func(context.Context) error {
+	if err := start(); err != nil {
+		log.Printf("warning: file watcher startup failed: %v", err)
+		// Polling owns local ingestion after startup fails; there is no
+		// watcher work for an attachment drain to hand off.
+		return func(context.Context) error { return nil }
+	}
+	return flush
 }
 
 // watchPollingObligations builds the polling obligations for the watch plan.

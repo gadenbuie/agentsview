@@ -7,7 +7,6 @@ import (
 
 	"go.kenn.io/agentsview/internal/db"
 	"go.kenn.io/agentsview/internal/ingest"
-	"go.kenn.io/agentsview/internal/parser"
 )
 
 func (e *Engine) sessionArchiveProvenance(session *db.Session, native string) (*db.ArchiveSessionProvenance, error) {
@@ -21,14 +20,14 @@ func (e *Engine) sessionArchiveProvenance(session *db.Session, native string) (*
 	return &p, nil
 }
 
-// Check the whole result set before staging freshness or other session writes:
-// one foreign DAG member must leave every existing member unchanged.
-func (e *Engine) validateArchiveResultOwnership(ctx context.Context, results []parser.ParseResult) error {
+// Check kept and excluded results before staging freshness or other session
+// writes: one conflicting DAG member must leave every existing member unchanged.
+func (e *Engine) validateSourceSessionOwnership(ctx context.Context, res processResult) error {
 	baseline := e.db
 	if old, ok := e.archiveStore.(*db.DB); ok {
 		baseline = old
 	}
-	for _, result := range results {
+	for _, result := range res.results {
 		session, err := ingest.ConvertSessionContext(ctx, result.Session, nil)
 		if err != nil {
 			return err
@@ -48,6 +47,23 @@ func (e *Engine) validateArchiveResultOwnership(ctx context.Context, results []p
 		if err := e.db.CheckArchiveSessionProvenance(ctx, session, provenance); err != nil {
 			return err
 		}
+	}
+	if !e.sourceAllowsParserExclusions(res) {
+		return nil
+	}
+	excluded := e.applyIDPrefixToSessionIDs(res.excludedSessionIDs)
+	for _, id := range excluded {
+		if id == "" {
+			continue
+		}
+		// Exclusion deletes have no ownership grant, even for an attached
+		// source. The delete transaction repeats this check.
+		if err := e.db.CheckArchiveSessionProvenance(ctx, db.Session{ID: id}, nil); err != nil {
+			return err
+		}
+	}
+	if len(excluded) > 0 && e.parserExclusionPolicy != nil {
+		return e.parserExclusionPolicy(ctx, excluded)
 	}
 	return nil
 }

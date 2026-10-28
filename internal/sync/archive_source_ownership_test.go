@@ -1,7 +1,9 @@
 package sync
 
 import (
+	"context"
 	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +14,91 @@ import (
 	"go.kenn.io/agentsview/internal/parser"
 	"go.kenn.io/agentsview/internal/testjsonl"
 )
+
+func TestClaudeExcludedBranchConflictPreservesExistingSessions(t *testing.T) {
+	for _, mode := range []string{"batch", "single"} {
+		for _, conflict := range []string{"ownership", "policy"} {
+			t.Run(mode+"/"+conflict, func(t *testing.T) {
+				database := openTestDB(t)
+				const device = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+				key := db.ArchiveAttachmentKey{RepositoryID: "repository", SnapshotID: "snapshot"}
+				owner := db.ArchiveSourceProvenance{Attachment: key, ManifestID: "manifest", Source: db.ArchiveSourceIdentity{
+					ArchiveID: "archive", DeviceID: device, RootID: "root", SourceKey: "source",
+				}}
+				require.NoError(t, database.RegisterArchiveAttachment(t.Context(), key, "archive"))
+				require.NoError(t, database.SetArchiveAttachmentTargets(t.Context(), key, "target", []db.ArchiveSourceTarget{{Provenance: owner, Target: "target"}}))
+				for _, native := range []string{"forked", "forked-i", "forked-probe"} {
+					var provenance *db.ArchiveSessionProvenance
+					if native == "forked-probe" && conflict == "ownership" {
+						provenance = &db.ArchiveSessionProvenance{ArchiveSourceProvenance: owner, NativeSessionID: native}
+					}
+					id := device + "~" + native
+					_, err := database.WriteSessionBatchAtomic(t.Context(), []db.SessionBatchWrite{{
+						Session:           db.Session{ID: id, Agent: "claude", Machine: device, Project: "saved"},
+						Messages:          []db.Message{{SessionID: id, Ordinal: 0, Role: "user", Content: "keep stored " + native}},
+						ArchiveProvenance: provenance, DataVersion: db.CurrentDataVersion(),
+					}})
+					require.NoError(t, err)
+				}
+				require.NoError(t, database.Update(t.Context(), func(tx *sql.Tx) error {
+					_, err := tx.ExecContext(t.Context(), `UPDATE sessions SET local_modified_at = '2020-01-01T00:00:00.000Z'`)
+					return err
+				}))
+				before := make(map[string]*db.Session)
+				beforeMessages := make(map[string][]db.Message)
+				for _, native := range []string{"forked", "forked-i", "forked-probe"} {
+					id := device + "~" + native
+					var err error
+					before[id], err = database.GetSessionFull(t.Context(), id)
+					require.NoError(t, err)
+					require.NotNil(t, before[id])
+					beforeMessages[id], err = database.GetAllMessages(t.Context(), id)
+					require.NoError(t, err)
+				}
+				root := t.TempDir()
+				path := filepath.Join(root, "project", "forked.jsonl")
+				builder := newClaudeDAGBuilder(true).AddClaudeUserWithUUID("2024-01-01T10:02:00Z",
+					"<command-name>/usage</command-name>\n<command-message>usage</command-message>\n<command-args></command-args>", "probe", "b")
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, []byte(builder.String()), 0o600))
+				cfg := EngineConfig{
+					AgentDirs: map[parser.AgentType][]string{parser.AgentClaude: {root}},
+					Machine:   device, IDPrefix: device + "~", Ephemeral: true,
+				}
+				policyErr := errors.New("parser exclusion conflicts with an existing session")
+				if conflict == "policy" {
+					cfg.ParserExclusionPolicy = func(_ context.Context, ids []string) error {
+						assert.Equal(t, []string{device + "~forked-probe"}, ids)
+						return policyErr
+					}
+				}
+				engine := NewEngine(t.Context(), database, cfg)
+				t.Cleanup(engine.Close)
+				if mode == "single" {
+					err := engine.SyncSingleSessionContext(t.Context(), "forked")
+					require.Error(t, err)
+					if conflict == "policy" {
+						require.ErrorIs(t, err, policyErr)
+					} else {
+						require.ErrorIs(t, err, db.ErrArchiveSourceConflict)
+					}
+				} else {
+					stats := engine.SyncAll(t.Context(), nil)
+					assert.Equal(t, 1, stats.Failed)
+					assert.Zero(t, stats.Synced)
+				}
+				for id, session := range before {
+					after, err := database.GetSessionFull(t.Context(), id)
+					require.NoError(t, err)
+					assert.Equal(t, session, after, "a rejected exclusion must preserve every branch's metadata")
+					messages, err := database.GetAllMessages(t.Context(), id)
+					require.NoError(t, err)
+					assert.Equal(t, beforeMessages[id], messages)
+				}
+			})
+		}
+	}
+}
 
 func TestAttachedClaudeDAGCollisionPreservesExistingSessions(t *testing.T) {
 	for _, collision := range []string{"forked", "forked-i"} {

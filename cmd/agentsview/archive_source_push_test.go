@@ -32,6 +32,34 @@ import (
 
 const attachedPushSession = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa~saved"
 
+func TestArchiveSourcesDrainAfterWatcherStartupFailure(t *testing.T) {
+	cfg := testConfigWithClaudeFixture(t)
+	cfg.ArchiveSources = []config.ArchiveSource{archiveSourceCommandFixture(t)}
+	database := dbtest.OpenTestDBAt(t, cfg.DBPath)
+	engine := syncpkg.NewEngine(t.Context(), database, localSyncEngineConfig(cfg))
+	t.Cleanup(engine.Close)
+	watcher, err := syncpkg.NewWatcherWithCallback(0, 0,
+		func(context.Context, syncpkg.WatchBatch) error { return nil }, nil, syncpkg.WatcherOptions{})
+	require.NoError(t, err)
+	t.Cleanup(watcher.Stop)
+	// A backend startup failure closes the watcher before returning its error.
+	flush := startWatcherCollection(func() error {
+		watcher.Stop()
+		return fmt.Errorf("start watcher backend: %w", os.ErrPermission)
+	}, watcher.FlushPending)
+	manager, err := archivesource.NewManager(t.Context(), cfg, database, engine, flush)
+	require.NoError(t, err)
+	t.Cleanup(manager.Close)
+
+	stats, err := manager.Drain(t.Context(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.Synced)
+	messages, err := database.GetAllMessages(t.Context(), attachedPushSession)
+	require.NoError(t, err)
+	require.Len(t, messages, 1)
+	assert.Equal(t, "archived message", messages[0].Content)
+}
+
 // Observe the archive at the destination boundary, before a push can finish.
 type archiveSourcePushProbe struct {
 	database *db.DB
